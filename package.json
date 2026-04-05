@@ -1,0 +1,35 @@
+{
+  "name": "ai-editor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "tauri:build": "tauri build",
+    "tauri:dev": "tauri dev",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.101",
+    "@iconify-json/simple-icons": "^1.2.76",
+    "@lmstudio/sdk": "^1.5.0",
+    "@nuxt/ui": "^4.6.0",
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-dialog": "~2",
+    "@tauri-apps/plugin-fs": "^2.4.5",
+    "@tauri-apps/plugin-opener": "^2.5.3",
+    "nuxt": "^4.4.2",
+    "sortablejs": "^1.15.7",
+    "tailwindcss": "^4.2.2"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.15.2",
+    "eslint": "^10.1.0",
+    "typescript": "^6.0.2",
+    "vue-tsc": "^3.2.6",
+    "@tauri-apps/cli": "^2.10.1"
+  }
+}
