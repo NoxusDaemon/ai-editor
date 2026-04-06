@@ -29,12 +29,3 @@ pub async fn write_file(_app: tauri::AppHandle, path: String, data: Vec<u8>) -> 
     std::fs::write(&path, data).map_err(|e| format!("Failed to write file '{}': {}", path, e))?;
     Ok(())
 }
-
-#[tauri::command]
-pub async fn handle_file(file_path: String) -> Result<String, String> {
-    // Here, you would process the file, e.g., save it to a directory
-    println!("Received file path: {}", file_path);
-
-    // You can process the file and return a response, e.g., confirmation
-    Ok(format!("File processed: {}", file_path))
-}

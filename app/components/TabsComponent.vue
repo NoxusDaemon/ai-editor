@@ -70,9 +70,7 @@ async function openFile() {
   const filePath = await open()
   if (!filePath || typeof filePath !== 'string') return
   const result = await usefileHandler().readFile(filePath)
-  totalJson.value.splice(0, totalJson.length)
-  totalJson.value.length = 0
-  totalJson.value.splice(0, 0, ...JSON.parse(result))
+  totalJson.value = [...JSON.parse(result)]
   dropperFile.value = filePath
 }
 
@@ -142,10 +140,10 @@ function checkTabs() {
 
 function addTab() {
   checkTabs()
-  const prevous = structuredClone(toRaw(totalJson.value[totalJson.value.length - 1]!))
-  prevous.label = (totalJson.value.length + 1).toString()
-  prevous.stopController = undefined
-  totalJson.value.push(prevous)
+  const previous = structuredClone(toRaw(totalJson.value[totalJson.value.length - 1]!))
+  previous.label = (totalJson.value.length + 1).toString()
+  previous.stopController = undefined
+  totalJson.value.push(previous)
   activeTab.value = (totalJson.value.length - 1).toString()
 }
 

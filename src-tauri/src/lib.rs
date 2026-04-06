@@ -8,10 +8,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::read_file,
             commands::read_file_bytes,
-            commands::write_file,
-            commands::handle_file
+            commands::write_file
         ])
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .run(tauri::generate_context!())
