@@ -69,7 +69,7 @@ const modal = overlay.create(FileComponent)
 async function openFile() {
   const filePath = await open()
   if (!filePath || typeof filePath !== 'string') return
-  const result = await usefileHandler().readFile(filePath)
+  const result = await useFileHandler().readFile(filePath)
   totalJson.value = [...JSON.parse(result)]
   dropperFile.value = filePath
 }

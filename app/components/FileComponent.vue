@@ -26,7 +26,7 @@ const overlayResult = useState<{ [id: string]: { path: string, password?: string
 const open = ref(false)
 
 async function submit() {
-  const canWrite = await usefileHandler().canWrite(props.droppedFile, password.value)
+  const canWrite = await useFileHandler().canWrite(props.droppedFile, password.value)
 
   if (canWrite) {
     overlayResult.value[props.func] = {

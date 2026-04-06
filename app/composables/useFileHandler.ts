@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core"
 
-export const usefileHandler = () => {
+export const useFileHandler = () => {
 
     const writeFile = async (path: string, data: Uint8Array): Promise<boolean> => {
         await invoke('write_file', { path, data })

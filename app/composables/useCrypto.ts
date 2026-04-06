@@ -30,8 +30,7 @@ export const useCrypto = () => {
   const decrypt = async (cipherTextBase64: string, password: string): Promise<unknown> => {
     try {
       // Decode Base64
-      // @ts-ignore
-      const combined = Uint8Array.fromBase64(cipherTextBase64)
+      const combined = Uint8Array.from(atob(cipherTextBase64), c => c.charCodeAt(0))
 
       return JSON.parse(await decryptCore(combined, password))
     } catch (error) {
@@ -59,9 +58,9 @@ export const useCrypto = () => {
 
   const encryptFile = async (path: string, password: string, dataToEncrypt: object) => {
     try {     
-      if (!password || !usefileHandler().canWrite(path, password)) return
+      if (!password || !useFileHandler().canWrite(path, password)) return
 
-      await usefileHandler().writeFile(path, new TextEncoder().encode(await encrypt(dataToEncrypt, password)))
+      await useFileHandler().writeFile(path, new TextEncoder().encode(await encrypt(dataToEncrypt, password)))
     } catch {
       throw new Error('Encryption failed. Check password.')
     }
@@ -69,7 +68,7 @@ export const useCrypto = () => {
 
   const decryptFile = async (path: string, password: string) => {
     try {
-      const cipherText = await usefileHandler().readFile(path)
+      const cipherText = await useFileHandler().readFile(path)
       return await decrypt(cipherText, password)
     } catch {
       throw new Error('Decryption failed. Wrong password?')
