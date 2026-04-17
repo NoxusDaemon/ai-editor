@@ -1,18 +1,6 @@
 <template>
   <div class="mx-2">
     <TabsComponent v-model="totalJson" />
-
-    <div v-if="filePath">
-      Loading File {{ filePath }}
-    </div>
-
-    <p>totalJson:</p>
-    <pre>{{ totalJson }}</pre>
-
-    <br>
-
-    <!-- Error Alert -->
-    <UAlert v-if="error" color="error" variant="soft" class="mt-4" :description="error" @close="error = ''" />
   </div>
 </template>
 
@@ -20,8 +8,6 @@
 import type { TabsItem } from '@nuxt/ui/runtime/components/Tabs.d.vue.js'
 
 const totalJson = reactive<TabsItem[]>([])
-const filePath = useState<string>('filePath')
-const error = useState<string>('error')
 const overlayResult = useState<{ [id: string]: { path: string, password?: string } }>('overlayResult', () => ({}))
 const statePassword = useState<string>('password')
 

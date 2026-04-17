@@ -1,7 +1,8 @@
 <template>
-  <UTabs v-model="activeTab" :items="totalJson" class="mt-2 w-full" :ui="{ list: 'sticky top-0' }">
+
+  <UTabs v-model="activeTab" :items="totalJson" class="mt-2 w-full" :ui="{ list: 'sticky top-2 z-50' }">
     <template #default="{ item, index }">
-      <div @click.middle.stop.prevent="deleteTab(index)" @dragover.prevent="quickSwitchTabs">
+      <div @click.middle.stop.prevent="deleteTab(index)" @dragover.stop.prevent="quickSwitchTabs" @click.stop >
         {{ item.label }}
       </div>
     </template>
@@ -9,6 +10,7 @@
     <template #list-trailing>
       <UButton icon="i-lucide-plus" @click="addTab" />
     </template>
+
     <template #content="{ index }">
       <div class="flex  justify-between">
         <USwitch v-model="AutoSaveSwitch" label="Auto Save" class="m-2" />
@@ -69,7 +71,7 @@ const modal = overlay.create(FileComponent)
 async function openFile() {
   const filePath = await open()
   if (!filePath || typeof filePath !== 'string') return
-  const result = await useFileHandler().readFile(filePath)
+  const result = await useFileHandler().readFileText(filePath)
   totalJson.value = [...JSON.parse(result)]
   dropperFile.value = filePath
 }
@@ -140,7 +142,7 @@ function checkTabs() {
 
 function addTab() {
   checkTabs()
-  const previous = structuredClone(toRaw(totalJson.value[totalJson.value.length - 1]!))
+  const previous = structuredClone(toRaw(totalJson.value[parseInt(activeTab.value)]!))
   previous.label = (totalJson.value.length + 1).toString()
   previous.stopController = undefined
   totalJson.value.push(previous)

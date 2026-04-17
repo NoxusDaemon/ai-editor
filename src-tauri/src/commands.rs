@@ -1,8 +1,8 @@
 use std::{fs::File, io::Read, path::Path};
 
 #[tauri::command]
-pub async fn read_file(_app: tauri::AppHandle, path: String) -> Result<String, String> {
-    let content: String = std::fs::read_to_string(&path)
+pub async fn read_file(_app: tauri::AppHandle, path: String) -> Result<Vec<u8>, String> {
+    let content: Vec<u8> = std::fs::read(&path)
         .map_err(|e| format!("Failed to read file '{}': {}", path, e))?;
     Ok(content)
 }

@@ -10,7 +10,8 @@ export const useFileHandler = () => {
     const readExact = async (path: string, length: number): Promise<Uint8Array<ArrayBuffer>> =>
         new Uint8Array(await invoke<number[]>('read_file_bytes', { path, length }))
 
-    const readFile = async (path: string) => await invoke<string>('read_file', { path })
+    const readFile = async (path: string) => new Uint8Array(await invoke<number[]>('read_file', { path }))
+    const readFileText = async (path: string) => new TextDecoder().decode(new Uint8Array(await invoke<number[]>('read_file', { path })))
 
     const canWrite = async (path: string, password: string) => {
         let result
@@ -46,6 +47,7 @@ export const useFileHandler = () => {
         canWrite,
         readExact,
         readFile,
+        readFileText,
         writeFile
     }
 }

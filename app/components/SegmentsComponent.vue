@@ -1,6 +1,6 @@
 <template>
     <div class="flex flex-wrap mt-1" @click="editing = -1">
-        <span class="flex  mr-1 rounded-xl border-2 border-solid" v-for="(segment, i) in segments" :key="'segment-' + i"
+        <span class="flex mr-1 rounded-xl border-2 border-solid" v-for="(segment, i) in segments" :key="'segment-' + i"
             @dblclick="editing = i; editingValue = segment">
             <div v-if="editing !== i" class="p-1">
                 {{ segment }}
@@ -18,7 +18,7 @@ const segments = defineModel()
 const editing = ref(-1)
 const editingValue = ref('')
 
-watch(editing, (newEditingValue, oldEditingValue) => {
+watch(editing, (_, oldEditingValue) => {
     if (oldEditingValue === -1) return
     if (editingValue.value === '') {
         segments.value.splice(oldEditingValue, 1)

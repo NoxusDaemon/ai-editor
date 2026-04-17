@@ -1,4 +1,4 @@
-// Helper to convert between ArrayBuffer and string
+// Helper to convert between ArrayBuffer and string (for JSON payload only)
 const ab2str = (buf: ArrayBuffer): string => new TextDecoder().decode(buf)
 
 const str2ab = (str: string): ArrayBuffer => new TextEncoder().encode(str).buffer
@@ -14,7 +14,7 @@ export const useCrypto = () => {
     ['encrypt', 'decrypt']
   )
 
-  const encrypt = async (data: object, password: string): Promise<string> => {
+  const encrypt = async (data: object, password: string): Promise<Uint8Array> => {
     try {
       // 1. Convert data to JSON string then to ArrayBuffer
       const rawData = JSON.stringify(data)
@@ -27,12 +27,10 @@ export const useCrypto = () => {
     }
   }
 
-  const decrypt = async (cipherTextBase64: string, password: string): Promise<unknown> => {
+  const decrypt = async (cipherText: Uint8Array<ArrayBuffer> , password: string): Promise<unknown> => {
     try {
-      // Decode Base64
-      const combined = Uint8Array.from(atob(cipherTextBase64), c => c.charCodeAt(0))
-
-      return JSON.parse(await decryptCore(combined, password))
+      // No Base64 decoding needed anymore. Input is raw binary.
+      return JSON.parse(await decryptCore(cipherText, password))
     } catch (error) {
       console.error('Decryption failed:', error)
       throw new Error('Failed to decrypt data. Incorrect password or corrupted data.')
@@ -59,8 +57,10 @@ export const useCrypto = () => {
   const encryptFile = async (path: string, password: string, dataToEncrypt: object) => {
     try {     
       if (!password || !useFileHandler().canWrite(path, password)) return
-
-      await useFileHandler().writeFile(path, new TextEncoder().encode(await encrypt(dataToEncrypt, password)))
+      
+      // Pass binary Uint8Array directly to writeFile. 
+      // Ensure useFileHandler supports binary writes in your Tauri setup.
+      await useFileHandler().writeFile(path, await encrypt(dataToEncrypt, password))
     } catch {
       throw new Error('Encryption failed. Check password.')
     }
@@ -68,7 +68,10 @@ export const useCrypto = () => {
 
   const decryptFile = async (path: string, password: string) => {
     try {
-      const cipherText = await useFileHandler().readFile(path)
+      // Ensure useFileHandler returns Uint8Array/Binary data here.
+      // If it returns a string by default, you may need to adjust the file handler config.
+      const cipherText = await useFileHandler().readFile(path) as Uint8Array<ArrayBuffer> 
+      
       return await decrypt(cipherText, password)
     } catch {
       throw new Error('Decryption failed. Wrong password?')
@@ -85,7 +88,7 @@ export const useCrypto = () => {
   }
 }
 
-const encryptCore = async (dataBuffer: ArrayBuffer, password: string): Promise<string> => {
+const encryptCore = async (dataBuffer: ArrayBuffer, password: string): Promise<Uint8Array> => {
   // Use Password-based encryption
   const salt = window.crypto.getRandomValues(new Uint8Array(16))
   const key: CryptoKey = await deriveKey(password, salt)
@@ -99,17 +102,18 @@ const encryptCore = async (dataBuffer: ArrayBuffer, password: string): Promise<s
     dataBuffer
   )
 
-  // Combine Salt + IV + CipherText into one string for storage
+  // Combine Salt + IV + CipherText into one Uint8Array for storage
   const combined = new Uint8Array(salt.byteLength + iv.byteLength + encryptedContent.byteLength)
   combined.set(salt)
   combined.set(iv, salt.byteLength)
   combined.set(new Uint8Array(encryptedContent), salt.byteLength + iv.byteLength)
-  // @ts-ignore
-  return combined.toBase64() // Base64 encode the whole thing
+  
+  // Return raw binary instead of Base64 string
+  return combined 
 }
 
 // Derive a key from a password (Useful if you want a user to type a password)
-const deriveKey = async (password: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> => {
+const deriveKey = async (password: string, salt: Uint8Array<ArrayBuffer> ): Promise<CryptoKey> => {
   const enc = new TextEncoder()
   const keyMaterial = await window.crypto.subtle.importKey(
     'raw',
