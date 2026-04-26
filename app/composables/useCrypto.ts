@@ -3,16 +3,27 @@ const ab2str = (buf: ArrayBuffer): string => new TextDecoder().decode(buf)
 
 const str2ab = (str: string): ArrayBuffer => new TextEncoder().encode(str).buffer
 
+// Web Crypto API availability check for Tauri compatibility
+function ensureCryptoSubtle(): CryptoKey[] {
+  if (!window.crypto?.subtle) {
+    throw new Error('Web Crypto API is not available in this environment')
+  }
+  return []
+}
+
 export const useCrypto = () => {
   // Generate a random key for encryption (Store this securely in production!)
-  const generateKey = async (): Promise<CryptoKey> => await window.crypto.subtle.generateKey(
-    {
-      name: 'AES-GCM',
-      length: 256
-    },
-    true, // extractable
-    ['encrypt', 'decrypt']
-  )
+  const generateKey = async (): Promise<CryptoKey> => {
+    ensureCryptoSubtle()
+    return await window.crypto.subtle.generateKey(
+      {
+        name: 'AES-GCM',
+        length: 256
+      },
+      true, // extractable
+      ['encrypt', 'decrypt']
+    )
+  }
 
   const encrypt = async (data: object, password: string): Promise<Uint8Array> => {
     try {
@@ -27,7 +38,7 @@ export const useCrypto = () => {
     }
   }
 
-  const decrypt = async (cipherText: Uint8Array<ArrayBuffer> , password: string): Promise<unknown> => {
+  const decrypt = async (cipherText: Uint8Array<ArrayBuffer>, password: string): Promise<unknown> => {
     try {
       // No Base64 decoding needed anymore. Input is raw binary.
       return JSON.parse(await decryptCore(cipherText, password))
@@ -55,24 +66,25 @@ export const useCrypto = () => {
   }
 
   const encryptFile = async (path: string, password: string, dataToEncrypt: object) => {
-    try {     
-      if (!password || !useFileHandler().canWrite(path, password)) return
-      
-      // Pass binary Uint8Array directly to writeFile. 
-      // Ensure useFileHandler supports binary writes in your Tauri setup.
+    try {
+      if (!password) {
+        throw new Error('Password is required')
+      }
+
+      // Pass binary Uint8Array directly to writeFile.
       await useFileHandler().writeFile(path, await encrypt(dataToEncrypt, password))
-    } catch {
+    } catch (error) {
+      if (error instanceof Error) throw error
       throw new Error('Encryption failed. Check password.')
     }
   }
 
-  const decryptFile = async (path: string, password: string) => {
+  const decryptFile = async (path: string, password: string): Promise<unknown> => {
     try {
       // Ensure useFileHandler returns Uint8Array/Binary data here.
-      // If it returns a string by default, you may need to adjust the file handler config.
-      const cipherText = await useFileHandler().readFile(path) as Uint8Array<ArrayBuffer> 
-      
-      return await decrypt(cipherText, password)
+      const cipherText = await useFileHandler().readFile(path)
+
+      return await decrypt(cipherText as Uint8Array<ArrayBuffer>, password)
     } catch {
       throw new Error('Decryption failed. Wrong password?')
     }
@@ -107,13 +119,13 @@ const encryptCore = async (dataBuffer: ArrayBuffer, password: string): Promise<U
   combined.set(salt)
   combined.set(iv, salt.byteLength)
   combined.set(new Uint8Array(encryptedContent), salt.byteLength + iv.byteLength)
-  
+
   // Return raw binary instead of Base64 string
-  return combined 
+  return combined
 }
 
 // Derive a key from a password (Useful if you want a user to type a password)
-const deriveKey = async (password: string, salt: Uint8Array<ArrayBuffer> ): Promise<CryptoKey> => {
+const deriveKey = async (password: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> => {
   const enc = new TextEncoder()
   const keyMaterial = await window.crypto.subtle.importKey(
     'raw',

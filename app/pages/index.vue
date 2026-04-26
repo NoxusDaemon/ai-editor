@@ -20,8 +20,7 @@ watch(overlayResult, async (oResult) => {
       try {
         const result = await useCrypto().decryptFile(wResults.path, wResults.password)
         totalJson.splice(0, totalJson.length)
-        totalJson.length = 0
-        // @ts-ignore
+        // @ts-expect-error - reactive array splice with spread works at runtime
         totalJson.splice(0, 0, ...result)
       } catch (e) {
         console.log(e)
@@ -34,12 +33,11 @@ watch(overlayResult, async (oResult) => {
     if (wResults.path && wResults.password) {
       console.log('passed checks')
       await useCrypto().encryptFile(wResults.path, wResults.password, totalJson)
-      console.log('wrote File');
+      console.log('wrote File')
       statePassword.value = wResults.password
     }
   }
 }, { immediate: true, deep: true })
-
 </script>
 
 <style>

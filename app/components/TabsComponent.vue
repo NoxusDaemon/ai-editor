@@ -1,28 +1,53 @@
 <template>
-
-  <UTabs v-model="activeTab" :items="totalJson" class="mt-2 w-full" :ui="{ list: 'sticky top-2 z-50' }">
+  <UTabs
+    v-model="activeTab"
+    :items="totalJson"
+    class="mt-2 w-full"
+    :ui="{ list: 'sticky top-2 z-50' }"
+  >
     <template #default="{ item, index }">
-      <div @click.middle.stop.prevent="deleteTab(index)" @dragover.stop.prevent="quickSwitchTabs" @click.stop >
+      <div
+        @click.middle.stop.prevent="deleteTab(index)"
+        @dragover.stop.prevent="quickSwitchTabs"
+        @click.stop
+      >
         {{ item.label }}
       </div>
     </template>
 
     <template #list-trailing>
-      <UButton icon="i-lucide-plus" @click="addTab" />
+      <UButton
+        icon="i-lucide-plus"
+        @click="addTab"
+      />
     </template>
 
     <template #content="{ index }">
       <div class="flex  justify-between">
-        <USwitch v-model="AutoSaveSwitch" label="Auto Save" class="m-2" />
-        <UDropdownMenu :items="items">
-          <UButton label="Open" icon="i-lucide-menu" color="neutral" variant="outline" />
-          <template #item="{ item }">
-            <UButton color="neutral" :icon="item.icon" variant="ghost" @click.prevent="item.function"
-              :label="item.label" />
+        <USwitch
+          v-model="tabAutoSave[index]"
+          :label="`Auto Save`"
+          class="m-2"
+        />
+        <UDropdownMenu :items="dropdownItems">
+          <UButton
+            label="Open"
+            icon="i-lucide-menu"
+            color="neutral"
+            variant="outline"
+          />
+          <template #item="{ item: menuItem }">
+            <UButton
+              color="neutral"
+              :icon="menuItem.icon"
+              variant="ghost"
+              :label="menuItem.label"
+              @click.prevent="menuItem.click"
+            />
           </template>
         </UDropdownMenu>
       </div>
-      <TabComponent v-model="totalJson[index]" />
+      <TabComponent v-model="totalJson[index]!" />
     </template>
   </UTabs>
 </template>
@@ -34,32 +59,37 @@ import FileComponent from '~/components/FileComponent.vue'
 import { invoke } from '@tauri-apps/api/core'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { useDebounceFn } from '@vueuse/core'
+import type { TabsItem } from '@nuxt/ui/runtime/components/Tabs.d.vue.js'
 
 const activeTab = ref('0')
-const totalJson = defineModel({ type: Object })
-const AutoSaveSwitch = ref(false)
-const dropperFile = useState<string>('filePath')
+const totalJson = defineModel<TabsItem[]>({ required: true, type: Array as () => TabsItem[] })
+
+// Per-tab auto-save and file path state
+const tabAutoSave = ref<Record<number, boolean>>({})
+const tabFilePath = ref<Record<number, string>>({})
+
 const statePassword = useState<string>('password')
-const items = ref<DropdownMenuItem[]>([
+
+const dropdownItems = ref<DropdownMenuItem[]>([
   {
     label: 'Open JSON File',
     icon: 'i-lucide-book-open',
-    function: openFile
+    click: openFile
   },
   {
     label: 'Open Encrypted File',
     icon: 'i-lucide-key',
-    function: openEncFile
+    click: openEncFile
   },
   {
     label: 'Export JSON File',
     icon: 'i-lucide-file-up',
-    function: exportFile
+    click: exportFile
   },
   {
     label: 'Save & Enc File',
     icon: 'i-lucide-save',
-    function: writeEncryptedFile
+    click: writeEncryptedFile
   }
 ])
 
@@ -69,67 +99,99 @@ const overlay = useOverlay()
 const modal = overlay.create(FileComponent)
 
 async function openFile() {
-  const filePath = await open()
-  if (!filePath || typeof filePath !== 'string') return
-  const result = await useFileHandler().readFileText(filePath)
-  totalJson.value = [...JSON.parse(result)]
-  dropperFile.value = filePath
+  try {
+    const filePath = await open()
+    if (!filePath || typeof filePath !== 'string') return
+    const result = await useFileHandler().readFileText(filePath)
+    totalJson.value = [...JSON.parse(result)]
+    // Set the file path for the active tab
+    const idx = parseInt(activeTab.value)
+    tabFilePath.value[idx] = filePath
+  } catch (error) {
+    console.error('Failed to open file:', error)
+  }
 }
 
 async function openEncFile() {
-  const filePath = await open()
-  if (!filePath || typeof filePath !== 'string') return
-  modal.open({ droppedFile: filePath, func: 'readEncryptedFile' })
-  dropperFile.value = filePath
+  try {
+    const filePath = await open()
+    if (!filePath || typeof filePath !== 'string') return
+    modal.open({ droppedFile: filePath, func: 'readEncryptedFile' })
+    // Set the file path for the active tab
+    const idx = parseInt(activeTab.value)
+    tabFilePath.value[idx] = filePath
+  } catch (error) {
+    console.error('Failed to select file:', error)
+  }
 }
 
 async function exportFile() {
-  const writPath = await save()
-  if (!writPath || typeof writPath !== 'string') return
-  await invoke('write_file', { path: writPath, data: new TextEncoder().encode(JSON.stringify(totalJson.value)).buffer })
-  dropperFile.value = writPath
+  try {
+    const writPath = await save()
+    if (!writPath || typeof writPath !== 'string') return
+    await invoke('write_file', { path: writPath, data: new TextEncoder().encode(JSON.stringify(totalJson.value)).buffer })
+    // Set the file path for the active tab
+    const idx = parseInt(activeTab.value)
+    tabFilePath.value[idx] = writPath
+  } catch (error) {
+    console.error('Failed to export file:', error)
+  }
 }
 
 async function writeEncryptedFile() {
-  const writPath = await save()
-  if (!writPath || typeof writPath !== 'string') return
-  modal.open({ droppedFile: writPath, func: 'writeEncryptedFile' })
-  dropperFile.value = writPath
+  try {
+    const writPath = await save()
+    if (!writPath || typeof writPath !== 'string') return
+    modal.open({ droppedFile: writPath, func: 'writeEncryptedFile' })
+    // Set the file path for the active tab
+    const idx = parseInt(activeTab.value)
+    tabFilePath.value[idx] = writPath
+  } catch (error) {
+    console.error('Failed to select save path:', error)
+  }
 }
 
-const debouncedFn = useDebounceFn(async (newTotalJson) => {
-  console.log('autosave check', AutoSaveSwitch.value);
+const debouncedFn = useDebounceFn(async (newTotalJson: TabsItem[], tabIndex: number) => {
+  if (!tabAutoSave.value[tabIndex]) return
 
-  if (!AutoSaveSwitch.value) return
-  console.log('passed autosave');
-
-  console.log('file path  check', dropperFile.value);
-  if (!dropperFile.value) return
-  console.log('passed file path check');
+  const filePath = tabFilePath.value[tabIndex]
+  if (!filePath) return
 
   if (statePassword.value) {
-    console.log('wrote to encrypted file')
-    await useCrypto().encryptFile(dropperFile.value, statePassword.value, newTotalJson)
+    await useCrypto().encryptFile(filePath, statePassword.value, newTotalJson)
     return
   }
 
-  console.log('wrote to unencrypted file')
-  await invoke('write_file', { path: dropperFile.value, data: new TextEncoder().encode(JSON.stringify(newTotalJson)).buffer })
+  await invoke('write_file', { path: filePath, data: new TextEncoder().encode(JSON.stringify(newTotalJson)).buffer })
 }, 1000)
 
 watch(totalJson, (newTotalJson) => {
-  console.log('detected changes');
-  debouncedFn(newTotalJson)
+  debouncedFn(newTotalJson, parseInt(activeTab.value))
 }, { immediate: true, deep: true })
 
+// Throttled version of quickSwitchTabs to prevent excessive tab switching on dragover
+let lastTabSwitch = 0
+const TAB_SWITCH_COOLDOWN = 150 // ms
+
 function quickSwitchTabs(tabEvent: DragEvent) {
+  const now = Date.now()
+  if (now - lastTabSwitch < TAB_SWITCH_COOLDOWN) return
+  lastTabSwitch = now
+
   const target = tabEvent.target as HTMLElement
-  activeTab.value = (parseInt(target.textContent) - 1).toString()
+  const tabElement = target.closest('[role="tab"]')
+  if (!tabElement) return
+  const textContent = tabElement.textContent?.trim()
+  if (!textContent) return
+  const tabIndex = parseInt(textContent) - 1
+  if (!isNaN(tabIndex)) {
+    activeTab.value = tabIndex.toString()
+  }
 }
 
 const getDefaultTab = () => {
   const newDefaultTab = structuredClone(toRaw(defaultTab))
-  newDefaultTab.promptsList.find((f) => f.key === 'User')!.content = 'Who are you, and what can you do?'
+  newDefaultTab.promptsList.find(f => f.key === 'User')!.content = 'Who are you, and what can you do?'
   return newDefaultTab
 }
 
@@ -142,21 +204,52 @@ function checkTabs() {
 
 function addTab() {
   checkTabs()
-  const previous = structuredClone(toRaw(totalJson.value[parseInt(activeTab.value)]!))
-  previous.label = (totalJson.value.length + 1).toString()
-  previous.stopController = undefined
-  totalJson.value.push(previous)
+  const activeIndex = parseInt(activeTab.value)
+  const previous = totalJson.value[activeIndex]
+  if (!previous) return
+
+  const cloned = structuredClone(toRaw(previous))
+  cloned.label = (totalJson.value.length + 1).toString()
+  cloned.stopController = undefined
+  totalJson.value.push(cloned)
   activeTab.value = (totalJson.value.length - 1).toString()
 }
 
 function deleteTab(index: number) {
-  console.log(index)
   if (totalJson.value.length <= 1) {
+    // Reset the single tab to defaults instead of deleting
     totalJson.value[0] = getDefaultTab()
     return
   }
 
   totalJson.value.splice(index, 1)
-}
 
+  // Adjust active tab index
+  const activeIdx = parseInt(activeTab.value)
+  if (activeIdx >= totalJson.value.length) {
+    activeTab.value = (totalJson.value.length - 1).toString()
+  }
+
+  // Clean up per-tab state for deleted tab
+  const newFilePaths: Record<number, string> = {}
+  const newAutoSave: Record<number, boolean> = {}
+  for (const [key, value] of Object.entries(tabFilePath.value)) {
+    const k = parseInt(key)
+    if (k < index) {
+      newFilePaths[k] = value
+    } else if (k > index) {
+      newFilePaths[k - 1] = value
+    }
+  }
+  for (const [key, value] of Object.entries(tabAutoSave.value)) {
+    const k = parseInt(key)
+    if (k < index) {
+      newAutoSave[k] = value
+    } else if (k > index) {
+      newAutoSave[k - 1] = value
+    }
+  }
+  tabFilePath.value = newFilePaths
+  tabAutoSave.value = newAutoSave
+}
 </script>

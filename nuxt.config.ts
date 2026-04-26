@@ -14,10 +14,6 @@ export default defineNuxtConfig({
   // Avoids error [unhandledRejection] EMFILE: too many open files, watch
   ignore: ['**/src-tauri/**'],
 
-  routeRules: {
-    '/': { prerender: true }
-  },
-
   compatibilityDate: '2025-01-15',
 
   vite: {
@@ -40,7 +36,7 @@ export default defineNuxtConfig({
         '@tauri-apps/api/webview',
         '@vueuse/core',
         '@tauri-apps/plugin-dialog',
-        '@vueuse/integrations/useSortable',
+        '@vueuse/integrations/useSortable'
       ]
     }
   },

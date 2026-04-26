@@ -17,7 +17,8 @@ pub async fn read_file_bytes(
     if !Path::new(&path).exists() {
         Ok(buf)
     } else {
-        let mut file: File = File::open(&path).expect("Failed to open file");
+        let mut file: File = File::open(&path)
+            .map_err(|e| format!("Failed to open file '{}': {}", path, e))?;
         file.read_exact(&mut buf)
             .map_err(|e| format!("Failed to read file '{}': {}", path, e))?;
         Ok(buf)

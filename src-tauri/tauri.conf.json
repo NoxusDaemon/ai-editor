@@ -16,7 +16,7 @@
         "title": "ai-editor",
         "width": 800,
         "height": 600,
-        "dragDropEnabled": false
+        "dragDropEnabled": true
       }
     ],
     "security": {
