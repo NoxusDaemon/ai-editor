@@ -27,6 +27,5 @@ export const defaultTab
         type: 'Editor'
       }
     ],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    stopController: undefined as any | OngoingPrediction
+    stopController: undefined as OngoingPrediction | undefined
   } satisfies TabsItem

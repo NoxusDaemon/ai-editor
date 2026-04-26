@@ -33,7 +33,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 const segments = defineModel<Array<string>>({ required: true })
 const editing = ref(-1)
 const editingValue = ref('')

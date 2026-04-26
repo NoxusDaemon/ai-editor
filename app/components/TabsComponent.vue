@@ -7,6 +7,7 @@
   >
     <template #default="{ item, index }">
       <div
+        :data-tab-index="index"
         @click.middle.stop.prevent="deleteTab(index)"
         @dragover.stop.prevent="quickSwitchTabs"
         @click.stop
@@ -61,7 +62,7 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 import { useDebounceFn } from '@vueuse/core'
 import type { TabsItem } from '@nuxt/ui/runtime/components/Tabs.d.vue.js'
 
-const activeTab = ref('0')
+const activeTab = useState<string>('activeTab', () => '0')
 const totalJson = defineModel<TabsItem[]>({ required: true, type: Array as () => TabsItem[] })
 
 // Per-tab auto-save and file path state
@@ -179,19 +180,18 @@ function quickSwitchTabs(tabEvent: DragEvent) {
   lastTabSwitch = now
 
   const target = tabEvent.target as HTMLElement
-  const tabElement = target.closest('[role="tab"]')
+  const tabElement = target.closest('[data-tab-index]') as HTMLElement | null
   if (!tabElement) return
-  const textContent = tabElement.textContent?.trim()
-  if (!textContent) return
-  const tabIndex = parseInt(textContent) - 1
+  const tabIndex = parseInt(tabElement.dataset.tabIndex || '')
   if (!isNaN(tabIndex)) {
     activeTab.value = tabIndex.toString()
   }
 }
 
 const getDefaultTab = () => {
-  const newDefaultTab = structuredClone(toRaw(defaultTab))
-  newDefaultTab.promptsList.find(f => f.key === 'User')!.content = 'Who are you, and what can you do?'
+  const raw = toRaw(defaultTab)
+  const newDefaultTab = JSON.parse(JSON.stringify(raw)) as TabsItem
+  newDefaultTab.promptsList.find((f: { key: string }) => f.key === 'User')!.content = 'Who are you, and what can you do?'
   return newDefaultTab
 }
 
@@ -208,7 +208,9 @@ function addTab() {
   const previous = totalJson.value[activeIndex]
   if (!previous) return
 
-  const cloned = structuredClone(toRaw(previous))
+  // Use JSON stringify/parse to avoid structuredClone issues with Vue proxies
+  // and non-serializable values like OngoingPrediction in stopController
+  const cloned = JSON.parse(JSON.stringify(previous)) as TabsItem
   cloned.label = (totalJson.value.length + 1).toString()
   cloned.stopController = undefined
   totalJson.value.push(cloned)

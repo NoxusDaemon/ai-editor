@@ -47,7 +47,7 @@
 <script setup lang="ts">
 const showPassword = ref(false)
 const password = ref('')
-const props = defineProps<{ droppedFile: string, func: string }>()
+const props = defineProps<{ droppedFile: string, func: 'readEncryptedFile' | 'writeEncryptedFile' }>()
 const overlayResult = useState<{ [id: string]: { path: string, password?: string } }>('overlayResult', () => ({}))
 
 const open = ref(false)
@@ -64,16 +64,25 @@ async function submit() {
   errorMessage.value = ''
 
   try {
-    const canWrite = await useFileHandler().canWrite(props.droppedFile, password.value)
-
-    if (canWrite) {
+    if (props.func === 'readEncryptedFile') {
+      // Verify password by attempting to decrypt the file header
+      const canDecryptResult = await useFileHandler().canDecrypt(props.droppedFile, password.value)
+      if (!canDecryptResult) {
+        errorMessage.value = 'Wrong password or invalid file format'
+      } else {
+        overlayResult.value[props.func] = {
+          path: props.droppedFile,
+          password: password.value
+        }
+        open.value = false
+      }
+    } else {
+      // For write: set the pending action directly — the encryptFile call will fail with wrong password
       overlayResult.value[props.func] = {
         path: props.droppedFile,
         password: password.value
       }
       open.value = false
-    } else {
-      errorMessage.value = 'Wrong password or invalid file format'
     }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'An unexpected error occurred'

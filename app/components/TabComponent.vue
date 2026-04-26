@@ -94,7 +94,7 @@ function addSegment() {
   const defaultItem = toRaw(defaultTab).promptsList.find(f => f.key === promptOption.value)
   if (!defaultItem) return
   // Clone the default item to avoid mutating the global default
-  item.value.promptsList.push(structuredClone(defaultItem))
+  item.value.promptsList.push(JSON.parse(JSON.stringify(defaultItem)))
 }
 
 function deleteSegment(editorIndex: number) {
@@ -103,7 +103,7 @@ function deleteSegment(editorIndex: number) {
 
 const modelSelectionStatus = ref('')
 const isStreaming = ref(false)
-const promptsList = ref(item.value?.promptsList ? structuredClone(item.value.promptsList) : [])
+const promptsList = ref(item.value?.promptsList ? JSON.parse(JSON.stringify(item.value.promptsList)) : [])
 const el = useTemplateRef<HTMLElement>('el')
 
 // Use singleton client instead of creating a new one per instance

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { MIN_HEADER_READ } from './useCrypto'
 
 export const useFileHandler = () => {
   const writeFile = async (path: string, data: Uint8Array): Promise<boolean> => {
@@ -16,10 +17,10 @@ export const useFileHandler = () => {
   const readFileText = async (path: string): Promise<string> =>
     new TextDecoder().decode(new Uint8Array(await invoke<number[]>('read_file', { path })))
 
-  const canWrite = async (path: string, password: string): Promise<boolean> => {
+  const canDecrypt = async (path: string, password: string): Promise<boolean> => {
     let existingData: Uint8Array<ArrayBuffer> | null = null
     try {
-      existingData = await readExact(path, 29)
+      existingData = await readExact(path, MIN_HEADER_READ)
     } catch {
       // File does not exist or is too small — can write
       return true
@@ -43,7 +44,7 @@ export const useFileHandler = () => {
   }
 
   return {
-    canWrite,
+    canDecrypt,
     readExact,
     readFile,
     readFileText,

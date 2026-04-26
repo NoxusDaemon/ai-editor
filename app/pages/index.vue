@@ -7,35 +7,36 @@
 <script lang="ts" setup>
 import type { TabsItem } from '@nuxt/ui/runtime/components/Tabs.d.vue.js'
 
-const totalJson = reactive<TabsItem[]>([])
+const totalJson = ref<TabsItem[]>([])
 const overlayResult = useState<{ [id: string]: { path: string, password?: string } }>('overlayResult', () => ({}))
 const statePassword = useState<string>('password')
 
 watch(overlayResult, async (oResult) => {
   if ('readEncryptedFile' in oResult) {
-    console.log('readEncryptedFile')
     const wResults = oResult['readEncryptedFile']
     if (wResults.path && wResults.password) {
-      console.log('passed checks')
       try {
-        const result = await useCrypto().decryptFile(wResults.path, wResults.password)
-        totalJson.splice(0, totalJson.length)
-        // @ts-expect-error - reactive array splice with spread works at runtime
-        totalJson.splice(0, 0, ...result)
+        const result = await useCrypto().decryptFile(wResults.path, wResults.password) as TabsItem[]
+        totalJson.value.splice(0, totalJson.value.length)
+        if (Array.isArray(result)) {
+          totalJson.value.splice(0, 0, ...result)
+        }
       } catch (e) {
-        console.log(e)
+        console.error('Failed to decrypt file:', e)
       }
       statePassword.value = wResults.password
     }
-  } else if ('writeEncryptedFile' in oResult) {
-    console.log('writeEncryptedFile')
+    // Clean up to prevent re-processing on subsequent mutations
+    delete overlayResult.value['readEncryptedFile']
+  }
+  if ('writeEncryptedFile' in oResult) {
     const wResults = oResult['writeEncryptedFile']
     if (wResults.path && wResults.password) {
-      console.log('passed checks')
       await useCrypto().encryptFile(wResults.path, wResults.password, totalJson)
-      console.log('wrote File')
       statePassword.value = wResults.password
     }
+    // Clean up to prevent re-processing on subsequent mutations
+    delete overlayResult.value['writeEncryptedFile']
   }
 }, { immediate: true, deep: true })
 </script>
