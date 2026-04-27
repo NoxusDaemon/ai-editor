@@ -44,10 +44,12 @@ vi.mock('@lmstudio/sdk', () => ({
   }))
 }))
 
-// Mock @tauri-apps/api/core
+// Mock @tauri-apps/api/core — use a mutable state object so tests can override
+const tauriInvokeState = { mock: vi.fn().mockResolvedValue(new Uint8Array()) }
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn().mockResolvedValue(new Uint8Array())
+  invoke: (...args: unknown[]) => tauriInvokeState.mock(...args)
 }))
+export { tauriInvokeState }
 
 // Mock @tauri-apps/plugin-dialog
 vi.mock('@tauri-apps/plugin-dialog', () => ({
@@ -98,3 +100,27 @@ vi.mock('~/constants/constants', () => ({
     stopController: undefined
   }
 }))
+
+// Mock useCrypto for tests that need it
+const cryptoMockState = {
+  decryptResult: null as string | null,
+  decryptThrows: false as boolean
+}
+
+vi.mock('~/composables/useCrypto', () => ({
+  MIN_HEADER_READ: 29,
+  useCrypto: () => ({
+    decryptCore: async () => {
+      if (cryptoMockState.decryptThrows) {
+        throw new Error('Decryption failed')
+      }
+      if (cryptoMockState.decryptResult !== null) {
+        return cryptoMockState.decryptResult
+      }
+      return ''
+    }
+  })
+}))
+
+// Export for tests to control mock behavior
+export { cryptoMockState }

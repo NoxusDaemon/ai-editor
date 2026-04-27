@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { MIN_HEADER_READ } from './useCrypto'
+import { MIN_HEADER_READ, useCrypto } from './useCrypto'
 
 export const useFileHandler = () => {
   const writeFile = async (path: string, data: Uint8Array): Promise<boolean> => {
