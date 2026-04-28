@@ -21,10 +21,10 @@ vi.mock('~/constants/constants', () => ({
     label: '1',
     selectedModel: 'liquid/lfm2.5-1.2b',
     promptsList: [
-      { key: 'Cache', content: [], type: 'Segments' },
-      { key: 'System', content: '', type: 'Editor' },
-      { key: 'User', content: '', type: 'Editor' },
-      { key: 'Assistant', content: '', type: 'Editor' }
+      { key: 'Cache', content: [], type: 'Segments' as const },
+      { key: 'System', content: '', type: 'Editor' as const },
+      { key: 'User', content: '', type: 'Editor' as const },
+      { key: 'Assistant', content: '', type: 'Editor' as const }
     ],
     stopController: undefined
   }
@@ -140,6 +140,50 @@ describe('getDefaultTab', () => {
     
     expect(keys).toEqual(['Cache', 'System', 'User', 'Assistant'])
   })
+
+  it('should have Cache with empty content array', () => {
+    const tab = getDefaultTab()
+    const cachePrompt = tab.promptsList.find((p: { key: string }) => p.key === 'Cache')
+    expect(cachePrompt?.content).toEqual([])
+  })
+
+  it('should have System with empty string content', () => {
+    const tab = getDefaultTab()
+    const sysPrompt = tab.promptsList.find((p: { key: string }) => p.key === 'System')
+    expect(sysPrompt?.content).toBe('')
+  })
+
+  it('should have Assistant with empty string content', () => {
+    const tab = getDefaultTab()
+    const asstPrompt = tab.promptsList.find((p: { key: string }) => p.key === 'Assistant')
+    expect(asstPrompt?.content).toBe('')
+  })
+
+  it('should have stopController as undefined', () => {
+    const tab = getDefaultTab()
+    expect(tab.stopController).toBeUndefined()
+  })
+
+  it('should have all promptsList items with correct types', () => {
+    const tab = getDefaultTab()
+    const cache = tab.promptsList[0]
+    const system = tab.promptsList[1]
+    const user = tab.promptsList[2]
+    const assistant = tab.promptsList[3]
+    
+    expect(cache.type).toBe('Segments')
+    expect(system.type).toBe('Editor')
+    expect(user.type).toBe('Editor')
+    expect(assistant.type).toBe('Editor')
+  })
+
+  it('should have content that is independent after modification', () => {
+    const tab1 = getDefaultTab()
+    const tab2 = getDefaultTab()
+    
+    tab1.promptsList[0].content.push('new item')
+    expect(tab2.promptsList[0].content).toEqual([])
+  })
 })
 
 describe('checkTabs', () => {
@@ -153,6 +197,31 @@ describe('checkTabs', () => {
 
   it('should not modify array when it already has items', () => {
     const totalJson = [{}]
+    const result = checkTabs(totalJson)
+    
+    expect(result).toBe(false)
+    expect(totalJson.length).toBe(1)
+  })
+
+  it('should add a properly structured default tab', () => {
+    const totalJson: unknown[] = []
+    checkTabs(totalJson)
+    
+    const tab = totalJson[0] as { label: string; promptsList: Array<{ key: string }> }
+    expect(tab.label).toBe('1')
+    expect(tab.promptsList.length).toBe(4)
+  })
+
+  it('should handle array with null item', () => {
+    const totalJson = [null]
+    const result = checkTabs(totalJson)
+    
+    expect(result).toBe(false)
+    expect(totalJson.length).toBe(1)
+  })
+
+  it('should handle array with undefined item', () => {
+    const totalJson = [undefined]
     const result = checkTabs(totalJson)
     
     expect(result).toBe(false)
@@ -218,6 +287,47 @@ describe('addTab', () => {
     expect((totalJson[2] as { label: string }).label).toBe('3')
     expect((totalJson[3] as { label: string }).label).toBe('4')
   })
+
+  it('should handle negative activeTab index', () => {
+    const totalJson = [getDefaultTab()]
+    const result = addTab(totalJson, '-1')
+    
+    expect(result).toBe(false)
+    expect(totalJson.length).toBe(1)
+  })
+
+  it('should handle non-numeric activeTab', () => {
+    const totalJson = [getDefaultTab()]
+    const result = addTab(totalJson, 'abc')
+    
+    expect(result).toBe(false)
+    expect(totalJson.length).toBe(1)
+  })
+
+  it('should create independent cloned tabs', () => {
+    const totalJson = [getDefaultTab()]
+    addTab(totalJson, '0')
+    
+    const tab1 = totalJson[0] as { promptsList: Array<{ content: string }> }
+    const tab2 = totalJson[1] as { promptsList: Array<{ content: string }> }
+    
+    tab1.promptsList[0].content.push('modified')
+    expect(tab2.promptsList[0].content).not.toContain('modified')
+  })
+
+  it('should preserve selectedModel when cloning', () => {
+    const existingTab = {
+      label: '1',
+      selectedModel: 'custom/model',
+      promptsList: [],
+      stopController: undefined
+    }
+    const totalJson = [existingTab]
+    addTab(totalJson, '0')
+    
+    const newTab = totalJson[1] as { selectedModel: string }
+    expect(newTab.selectedModel).toBe('custom/model')
+  })
 })
 
 describe('deleteTab', () => {
@@ -282,6 +392,71 @@ describe('deleteTab', () => {
     expect(totalJson.length).toBe(1)
     expect(result?.tabFilePath[0]).toBe('/path1.json')
   })
+
+  it('should handle deleting first tab', () => {
+    const totalJson = [getDefaultTab(), getDefaultTab()]
+    const tabFilePath: Record<number, string> = { 0: '/path1.json', 1: '/path2.json' }
+    const tabAutoSave: Record<number, boolean> = { 0: true, 1: false }
+    const activeTabRef = { value: '1' }
+    
+    const result = deleteTab(totalJson, tabFilePath, tabAutoSave, 0, activeTabRef)
+    
+    expect(totalJson.length).toBe(1)
+    expect(result?.tabFilePath[0]).toBe('/path2.json')
+    expect(activeTabRef.value).toBe('0')
+  })
+
+  it('should handle deleting middle tab in a 4-tab array', () => {
+    const totalJson = [getDefaultTab(), getDefaultTab(), getDefaultTab(), getDefaultTab()]
+    const tabFilePath: Record<number, string> = { 0: '/0.json', 1: '/1.json', 2: '/2.json', 3: '/3.json' }
+    const tabAutoSave: Record<number, boolean> = { 0: true, 1: false, 2: true, 3: false }
+    const activeTabRef = { value: '1' }
+    
+    const result = deleteTab(totalJson, tabFilePath, tabAutoSave, 1, activeTabRef)
+    
+    expect(totalJson.length).toBe(3)
+    expect(result?.tabFilePath[0]).toBe('/0.json')
+    expect(result?.tabFilePath[1]).toBe('/2.json')
+    expect(result?.tabFilePath[2]).toBe('/3.json')
+    expect(result?.tabAutoSave[0]).toBe(true)
+    expect(result?.tabAutoSave[1]).toBe(true)
+    expect(result?.tabAutoSave[2]).toBe(false)
+  })
+
+  it('should handle deleting tab with activeTab at same index', () => {
+    const totalJson = [getDefaultTab(), getDefaultTab(), getDefaultTab()]
+    const tabFilePath: Record<number, string> = {}
+    const tabAutoSave: Record<number, boolean> = {}
+    const activeTabRef = { value: '1' }
+    
+    deleteTab(totalJson, tabFilePath, tabAutoSave, 1, activeTabRef)
+    
+    expect(activeTabRef.value).toBe('1') // was 1, now points to what was tab 2
+  })
+
+  it('should handle negative index', () => {
+    const totalJson = [getDefaultTab(), getDefaultTab()]
+    const tabFilePath: Record<number, string> = {}
+    const tabAutoSave: Record<number, boolean> = {}
+    const activeTabRef = { value: '0' }
+    
+    deleteTab(totalJson, tabFilePath, tabAutoSave, -1, activeTabRef)
+    
+    expect(totalJson.length).toBe(1)
+  })
+
+  it('should handle index beyond array length gracefully', () => {
+    const totalJson = [getDefaultTab(), getDefaultTab()]
+    const tabFilePath: Record<number, string> = { 0: '/0.json', 1: '/1.json' }
+    const tabAutoSave: Record<number, boolean> = { 0: true, 1: false }
+    const activeTabRef = { value: '0' }
+    
+    deleteTab(totalJson, tabFilePath, tabAutoSave, 5, activeTabRef)
+    
+    // JS splice with index beyond length is a no-op, so length stays 2
+    // but the function still returns cleaned state objects
+    expect(totalJson.length).toBe(2)
+  })
 })
 
 describe('quickSwitchTabs throttling', () => {
@@ -330,5 +505,241 @@ describe('quickSwitchTabs throttling', () => {
     quickSwitchTabs(1000, 1)
     const result = quickSwitchTabs(1150, 2) // exactly 150ms
     expect(result).toBe(2)
+  })
+
+  it('should block switch 1ms before cooldown ends', () => {
+    let lastTabSwitch = 0
+    const TAB_SWITCH_COOLDOWN = 150
+    
+    function quickSwitchTabs(now: number, tabIndex: number) {
+      if (now - lastTabSwitch < TAB_SWITCH_COOLDOWN) return null
+      lastTabSwitch = now
+      return tabIndex
+    }
+    
+    quickSwitchTabs(1000, 1)
+    const result = quickSwitchTabs(1149, 2) // 149ms < 150ms cooldown
+    expect(result).toBeNull()
+  })
+
+  it('should allow multiple switches after cooldown passes each time', () => {
+    let lastTabSwitch = 0
+    const TAB_SWITCH_COOLDOWN = 150
+    
+    function quickSwitchTabs(now: number, tabIndex: number) {
+      if (now - lastTabSwitch < TAB_SWITCH_COOLDOWN) return null
+      lastTabSwitch = now
+      return tabIndex
+    }
+    
+    const results = [
+      quickSwitchTabs(1000, 1),
+      quickSwitchTabs(1200, 2),
+      quickSwitchTabs(1400, 3),
+      quickSwitchTabs(1600, 4),
+      quickSwitchTabs(1800, 5)
+    ]
+    
+    expect(results).toEqual([1, 2, 3, 4, 5])
+  })
+
+  it('should handle rapid clicks within cooldown', () => {
+    let lastTabSwitch = 0
+    const TAB_SWITCH_COOLDOWN = 150
+    
+    function quickSwitchTabs(now: number, tabIndex: number) {
+      if (now - lastTabSwitch < TAB_SWITCH_COOLDOWN) return null
+      lastTabSwitch = now
+      return tabIndex
+    }
+    
+    const results = [
+      quickSwitchTabs(1000, 1),
+      quickSwitchTabs(1010, 2),
+      quickSwitchTabs(1020, 3),
+      quickSwitchTabs(1030, 4),
+      quickSwitchTabs(1040, 5)
+    ]
+    
+    expect(results).toEqual([1, null, null, null, null])
+  })
+
+  it('should handle very large time gaps', () => {
+    let lastTabSwitch = 0
+    const TAB_SWITCH_COOLDOWN = 150
+    
+    function quickSwitchTabs(now: number, tabIndex: number) {
+      if (now - lastTabSwitch < TAB_SWITCH_COOLDOWN) return null
+      lastTabSwitch = now
+      return tabIndex
+    }
+    
+    quickSwitchTabs(1000, 1)
+    const result = quickSwitchTabs(1000000, 2) // 999000ms gap
+    expect(result).toBe(2)
+  })
+
+  it('should handle zero time gap (same timestamp)', () => {
+    let lastTabSwitch = 0
+    const TAB_SWITCH_COOLDOWN = 150
+    
+    function quickSwitchTabs(now: number, tabIndex: number) {
+      if (now - lastTabSwitch < TAB_SWITCH_COOLDOWN) return null
+      lastTabSwitch = now
+      return tabIndex
+    }
+    
+    quickSwitchTabs(1000, 1)
+    const result = quickSwitchTabs(1000, 2) // same timestamp
+    expect(result).toBeNull()
+  })
+})
+
+describe('integration: add and delete tabs', () => {
+  it('should handle add-then-delete cycle', () => {
+    const totalJson = [getDefaultTab()]
+    const tabFilePath: Record<number, string> = { 0: '/0.json' }
+    const tabAutoSave: Record<number, boolean> = { 0: true }
+    const activeTabRef = { value: '0' }
+    
+    addTab(totalJson, '0')
+    expect(totalJson.length).toBe(2)
+    
+    deleteTab(totalJson, tabFilePath, tabAutoSave, 1, activeTabRef)
+    expect(totalJson.length).toBe(1)
+  })
+
+  it('should handle multiple add-delete cycles', () => {
+    const totalJson = [getDefaultTab()]
+    const tabFilePath: Record<number, string> = { 0: '/0.json' }
+    const tabAutoSave: Record<number, boolean> = { 0: true }
+    const activeTabRef = { value: '0' }
+    
+    // Add 3 tabs
+    for (let i = 0; i < 3; i++) {
+      addTab(totalJson, (totalJson.length - 1).toString())
+    }
+    expect(totalJson.length).toBe(4)
+    
+    // Delete all but one
+    for (let i = 3; i > 0; i--) {
+      deleteTab(totalJson, tabFilePath, tabAutoSave, i, activeTabRef)
+    }
+    expect(totalJson.length).toBe(1)
+  })
+
+  it('should handle adding tabs with different content', () => {
+    const totalJson = [getDefaultTab()]
+    
+    // Modify first tab
+    const tab1 = totalJson[0] as { promptsList: Array<{ content: string }> }
+    tab1.promptsList[2].content = 'Custom user prompt'
+    
+    addTab(totalJson, '0')
+    
+    const tab2 = totalJson[1] as { promptsList: Array<{ content: string }> }
+    // Should be a clone, so it should also have the custom content
+    expect(tab2.promptsList[2].content).toBe('Custom user prompt')
+  })
+
+  it('should handle file paths correctly through add-delete cycles', () => {
+    const totalJson = [getDefaultTab()]
+    const tabFilePath: Record<number, string> = { 0: '/original.json' }
+    const tabAutoSave: Record<number, boolean> = { 0: true }
+    const activeTabRef = { value: '0' }
+    
+    addTab(totalJson, '0')
+    tabFilePath[1] = '/cloned.json'
+    
+    deleteTab(totalJson, tabFilePath, tabAutoSave, 1, activeTabRef)
+    
+    expect(tabFilePath[0]).toBe('/original.json')
+  })
+})
+
+describe('edge cases for tab operations', () => {
+  it('should handle tab with empty promptsList', () => {
+    const emptyTab = {
+      label: '1',
+      selectedModel: 'model',
+      promptsList: [],
+      stopController: undefined
+    }
+    const totalJson = [emptyTab]
+    
+    const result = addTab(totalJson, '0')
+    expect(result).toBe(true)
+    expect(totalJson.length).toBe(2)
+  })
+
+  it('should handle tab with null selectedModel', () => {
+    const nullModelTab = {
+      label: '1',
+      selectedModel: null,
+      promptsList: [],
+      stopController: undefined
+    }
+    const totalJson = [nullModelTab]
+    
+    const result = addTab(totalJson, '0')
+    expect(result).toBe(true)
+    expect(totalJson.length).toBe(2)
+  })
+
+  it('should handle tab with very long label', () => {
+    const longLabelTab = {
+      label: 'x'.repeat(1000),
+      selectedModel: 'model',
+      promptsList: [],
+      stopController: undefined
+    }
+    const totalJson = [longLabelTab]
+    
+    const result = addTab(totalJson, '0')
+    expect(result).toBe(true)
+    expect(totalJson.length).toBe(2)
+  })
+
+  it('should handle tab with unicode content', () => {
+    const unicodeTab = {
+      label: '1',
+      selectedModel: 'model',
+      promptsList: [{ key: 'User', content: 'こんにちは世界 🌍' }],
+      stopController: undefined
+    }
+    const totalJson = [unicodeTab]
+    
+    addTab(totalJson, '0')
+    const newTab = totalJson[1] as { promptsList: Array<{ content: string }> }
+    expect(newTab.promptsList[0].content).toBe('こんにちは世界 🌍')
+  })
+
+  it('should handle tab with special characters in content', () => {
+    const specialTab = {
+      label: '1',
+      selectedModel: 'model',
+      promptsList: [{ key: 'User', content: '<script>alert("xss")</script>' }],
+      stopController: undefined
+    }
+    const totalJson = [specialTab]
+    
+    addTab(totalJson, '0')
+    const newTab = totalJson[1] as { promptsList: Array<{ content: string }> }
+    expect(newTab.promptsList[0].content).toBe('<script>alert("xss")</script>')
+  })
+
+  it('should handle tab with very long content', () => {
+    const longContent = 'x'.repeat(100000)
+    const longTab = {
+      label: '1',
+      selectedModel: 'model',
+      promptsList: [{ key: 'User', content: longContent }],
+      stopController: undefined
+    }
+    const totalJson = [longTab]
+    
+    addTab(totalJson, '0')
+    const newTab = totalJson[1] as { promptsList: Array<{ content: string }> }
+    expect(newTab.promptsList[0].content).toBe(longContent)
   })
 })
