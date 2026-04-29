@@ -3,19 +3,25 @@ import { defineVitestProject } from '@nuxt/test-utils/config'
 
 export default defineConfig({
   test: {
+    globals: true, // This makes vi available globally
+    setupFiles: ['./test/nuxt/.vitest.setup.ts'],
     projects: [
       await defineVitestProject({
-        name: 'unit',
-        root: './test/unit',
-        include: ['**/*.{test,spec}.ts'],
-        environment: 'node',
+        test: {
+          name: 'unit',
+          root: './test/unit',
+          include: ['**/*.{test,spec}.ts'],
+          environment: 'node'
+        }
       }),
       await defineVitestProject({
-        name: 'nuxt',
-        root: './test/nuxt',
-        include: ['**/*.{test,spec}.ts'],
-        environment: 'nuxt',
-      }),
-    ],
-  },
+        test: {
+          name: 'nuxt',
+          root: './test/nuxt',
+          include: ['**/*.{test,spec}.ts'],
+          environment: 'nuxt'
+        }
+      })
+    ]
+  }
 })
