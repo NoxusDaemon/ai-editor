@@ -1,23 +1,21 @@
 import { defineConfig } from 'vitest/config'
-import vue from '@vitejs/plugin-vue'
-import vueJsx from '@vitejs/plugin-vue-jsx'
-import { resolve } from 'path'
+import { defineVitestProject } from '@nuxt/test-utils/config'
 
 export default defineConfig({
-  plugins: [vue(), vueJsx()],
   test: {
-    globals: true,
-    environment: 'jsdom',
-    include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],
-    alias: {
-      '~': resolve(__dirname, 'app'),
-      '~/': resolve(__dirname, 'app/')
-    },
-    setupFiles: ['test/setup.ts'],
-    environmentOptions: {
-      jsdom: {
-        url: 'http://localhost/'
-      }
-    }
-  }
+    projects: [
+      await defineVitestProject({
+        name: 'unit',
+        root: './test/unit',
+        include: ['**/*.{test,spec}.ts'],
+        environment: 'node',
+      }),
+      await defineVitestProject({
+        name: 'nuxt',
+        root: './test/nuxt',
+        include: ['**/*.{test,spec}.ts'],
+        environment: 'nuxt',
+      }),
+    ],
+  },
 })
