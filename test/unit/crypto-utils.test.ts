@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock window.crypto.subtle before importing useCrypto
 const mockSubtle = {
@@ -22,7 +22,6 @@ Object.defineProperty(global, 'crypto', {
 
 describe('useCrypto - constants and structure', () => {
   it('MIN_HEADER_READ should be 29 (16 salt + 12 IV + 1)', () => {
-    // 16 (salt) + 12 (IV) = 28 bytes header, +1 for first byte check = 29
     expect(16 + 12 + 1).toBe(29)
   })
 
@@ -58,6 +57,7 @@ describe('safeJsonStringify behavior', () => {
   it('should handle circular references when serialized', () => {
     const obj: Record<string, unknown> = { name: 'test' }
     obj.self = obj
+    const seen = new WeakSet()
     const result = JSON.stringify(obj, (_key, value) => {
       if (value != null && typeof value === 'object') {
         if (seen.has(value)) return '[Circular]'
@@ -68,9 +68,6 @@ describe('safeJsonStringify behavior', () => {
     expect(result).toContain('[Circular]')
   })
 })
-
-// We need a WeakSet for the circular reference test
-const seen = new WeakSet()
 
 describe('deepUnwrap behavior', () => {
   it('should return null values as-is', () => {

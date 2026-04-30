@@ -107,9 +107,7 @@ describe('useFileHandler - canDecrypt', () => {
   })
 
   it('should return false when file cannot be decrypted', async () => {
-    // First call returns non-empty data
     mockInvoke.mockResolvedValueOnce(new Uint8Array([1, 2, 3, ...new Array(25).fill(0)]))
-    // Second call (decryptCore) throws
     mockSubtle.decrypt.mockRejectedValueOnce(new Error('Decryption failed'))
 
     const { useFileHandler } = await import('~/composables/useFileHandler')
