@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { MIN_HEADER_READ, useCrypto } from './useCrypto'
+import { useCrypto } from './useCrypto'
 
 export const useFileHandler = () => {
   const writeFile = async (path: string, data: Uint8Array): Promise<boolean> => {
@@ -18,24 +18,28 @@ export const useFileHandler = () => {
     new TextDecoder().decode(new Uint8Array(await invoke<number[]>('read_file', { path })))
 
   const canDecrypt = async (path: string, password: string): Promise<boolean> => {
-    let existingData: Uint8Array<ArrayBuffer> | null = null
+    let existingData: Uint8Array
     try {
-      existingData = await readExact(path, MIN_HEADER_READ)
+      existingData = await readFile(path)
     } catch {
-      // File does not exist or is too small — can write
+      // File does not exist — safe to write
       return true
     }
 
-    // Check if file is empty (all zeros) — new file, safe to write
-    if (existingData.every(b => b === 0)) {
+    // Check if file is empty — new file, safe to write
+    if (existingData.length === 0) {
       return true
     }
 
-    // File has content — verify it's a valid encrypted file with the correct password
+    // File has content — verify it's a valid encrypted file with the correct password.
+    // Must read the FULL file (not just the header) because AES-GCM requires the
+    // authentication tag (last 16 bytes of ciphertext) to verify the password.
+    // Reading only 29 bytes leaves no room for the auth tag, so decryption always fails.
     try {
       const decryptedResult = await useCrypto().decryptCore(existingData, password)
-      // Valid JSON array start
-      if (!decryptedResult.startsWith('[')) return false
+      // Must start with valid JSON (array or object)
+      const trimmed = decryptedResult.trimStart()
+      if (trimmed[0] !== '[' && trimmed[0] !== '{') return false
       return true
     } catch {
       // Wrong password or not an encrypted file
