@@ -116,7 +116,7 @@ describe('TabComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.isStreaming).toBe(false)
+    expect((wrapper.vm as any).isStreaming).toBe(false)
   })
 
   it('has modelSelectionStatus ref initialized', async () => {
@@ -127,7 +127,7 @@ describe('TabComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.modelSelectionStatus).toBeDefined()
+    expect((wrapper.vm as any).modelSelectionStatus).toBeDefined()
   })
 
   it('has promptOption ref initialized to Cache', async () => {
@@ -138,7 +138,7 @@ describe('TabComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.promptOption).toBe('Cache')
+    expect((wrapper.vm as any).promptOption).toBe('Cache')
   })
 
   it('has promptOptions array with Cache, User, Assistant', async () => {
@@ -149,9 +149,9 @@ describe('TabComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.promptOptions).toContain('Cache')
-    expect(wrapper.vm.promptOptions).toContain('User')
-    expect(wrapper.vm.promptOptions).toContain('Assistant')
+    expect((wrapper.vm as any).promptOptions).toContain('Cache')
+    expect((wrapper.vm as any).promptOptions).toContain('User')
+    expect((wrapper.vm as any).promptOptions).toContain('Assistant')
   })
 
   it('renders with segments in Cache section', async () => {
@@ -277,7 +277,7 @@ describe('TabComponent', () => {
     })
 
     const spans = wrapper.findAll('span')
-    const userSpan = spans.find(s => s.text().includes('User'))
+    const _userSpan = spans.find(s => s.text().includes('User'))
     // The User key is rendered as a span with the key text
     // Note: In test environment, some spans may not render their text content
     // We verify the component renders without errors

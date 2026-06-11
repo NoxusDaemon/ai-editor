@@ -57,7 +57,7 @@ describe('FileComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.password).toBeDefined()
+    expect((wrapper.vm as any).password).toBeDefined()
   })
 
   it('has a showPassword ref initialized to false', async () => {
@@ -69,7 +69,7 @@ describe('FileComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.showPassword).toBe(false)
+    expect((wrapper.vm as any).showPassword).toBe(false)
   })
 
   it('has an errorMessage ref initialized', async () => {
@@ -81,7 +81,7 @@ describe('FileComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.errorMessage).toBeDefined()
+    expect((wrapper.vm as any).errorMessage).toBeDefined()
   })
 
   it('has an isLoading ref initialized to false', async () => {
@@ -93,7 +93,7 @@ describe('FileComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.isLoading).toBe(false)
+    expect((wrapper.vm as any).isLoading).toBe(false)
   })
 
   it('has droppedFile prop accessible', async () => {
@@ -116,11 +116,11 @@ describe('FileComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.showPassword).toBe(false)
+    expect((wrapper.vm as any).showPassword).toBe(false)
 
-    wrapper.vm.showPassword = true
+    ;(wrapper.vm as any).showPassword = true
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.showPassword).toBe(true)
+    expect((wrapper.vm as any).showPassword).toBe(true)
   })
 
   it('can clear errorMessage after setting it', async () => {
@@ -132,13 +132,13 @@ describe('FileComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    wrapper.vm.errorMessage = 'Some error'
+    ;(wrapper.vm as any).errorMessage = 'Some error'
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.errorMessage).toBe('Some error')
+    expect((wrapper.vm as any).errorMessage).toBe('Some error')
 
-    wrapper.vm.errorMessage = ''
+    ;(wrapper.vm as any).errorMessage = ''
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.errorMessage).toBe('')
+    expect((wrapper.vm as any).errorMessage).toBe('')
   })
 
   it('can set isLoading state', async () => {
@@ -150,11 +150,11 @@ describe('FileComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.isLoading).toBe(false)
+    expect((wrapper.vm as any).isLoading).toBe(false)
 
-    wrapper.vm.isLoading = true
+    ;(wrapper.vm as any).isLoading = true
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.isLoading).toBe(true)
+    expect((wrapper.vm as any).isLoading).toBe(true)
   })
 
   it('can set password value', async () => {
@@ -166,9 +166,9 @@ describe('FileComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    wrapper.vm.password = 'testpassword'
+    ;(wrapper.vm as any).password = 'testpassword'
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.password).toBe('testpassword')
+    expect((wrapper.vm as any).password).toBe('testpassword')
   })
 
   it('renders a modal wrapper', async () => {

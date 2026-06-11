@@ -41,7 +41,7 @@ describe('SegmentsComponent', () => {
 
     const buttons = wrapper.findAll('button')
     if (buttons.length > 0) {
-      await buttons[buttons.length - 1].trigger('click')
+      await buttons[buttons.length - 1]!.trigger('click')
       await wrapper.vm.$nextTick()
     }
 
@@ -87,7 +87,7 @@ describe('SegmentsComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.editing).toBe(-1)
+    expect((wrapper.vm as any).editing).toBe(-1)
   })
 
   it('has editingValue ref initialized', async () => {
@@ -98,7 +98,7 @@ describe('SegmentsComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.editingValue).toBeDefined()
+    expect((wrapper.vm as any).editingValue).toBeDefined()
   })
 
   it('renders segments with correct keys', async () => {

@@ -36,7 +36,7 @@ export const useFileHandler = () => {
     // authentication tag (last 16 bytes of ciphertext) to verify the password.
     // Reading only 29 bytes leaves no room for the auth tag, so decryption always fails.
     try {
-      const decryptedResult = await useCrypto().decryptCore(existingData, password)
+      const decryptedResult = await useCrypto().decryptCore(existingData as Uint8Array<ArrayBuffer>, password)
       // Must start with valid JSON (array or object)
       const trimmed = decryptedResult.trimStart()
       if (trimmed[0] !== '[' && trimmed[0] !== '{') return false

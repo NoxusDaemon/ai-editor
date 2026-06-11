@@ -123,7 +123,7 @@ describe('TabsComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.tabAutoSave).toBeDefined()
+    expect((wrapper.vm as any).tabAutoSave).toBeDefined()
   })
 
   it('renders tab labels with correct indices', async () => {
@@ -145,7 +145,7 @@ describe('TabsComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    const autoSave = wrapper.vm.tabAutoSave as Record<number, boolean>
+    const autoSave = (wrapper.vm as any).tabAutoSave as Record<number, boolean>
     expect(typeof autoSave).toBe('object')
   })
 
@@ -222,7 +222,7 @@ describe('TabsComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.tabFilePath).toBeDefined()
+    expect((wrapper.vm as any).tabFilePath).toBeDefined()
   })
 
   it('renders with empty tabs array', async () => {
@@ -296,7 +296,7 @@ describe('TabsComponent', () => {
       }
     })
 
-    expect(wrapper.props('modelValue')[0].selectedModel).toBe('custom/model/v1')
+    expect(wrapper.props('modelValue')[0]!.selectedModel).toBe('custom/model/v1')
   })
 
   it('renders with tab containing editor content', async () => {
@@ -329,7 +329,7 @@ describe('TabsComponent', () => {
     })
 
     await wrapper.vm.$nextTick()
-    expect(wrapper.vm.activeTab).toBeDefined()
+    expect((wrapper.vm as any).activeTab).toBeDefined()
   })
 
   it('renders with tab containing stopController', async () => {
