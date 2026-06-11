@@ -1,6 +1,5 @@
 <template>
   <UModal
-    v-model:open="open"
     title="File Selector"
     description="File Selector"
   >
@@ -11,6 +10,7 @@
         class="m-2"
         placeholder="password"
         :ui="{ trailing: 'pe-1' }"
+        @keyup.enter="submit"
       >
         <template #trailing>
           <UButton
@@ -50,10 +50,10 @@ const password = ref('')
 const props = defineProps<{ droppedFile: string, func: 'readEncryptedFile' | 'writeEncryptedFile' }>()
 const overlayResult = useState<{ [id: string]: { path: string, password?: string } }>('overlayResult', () => ({}))
 
-const open = ref(false)
 const errorMessage = ref('')
 const isLoading = ref(false)
 
+const emit = defineEmits(['close'])
 async function submit() {
   if (!password.value) {
     errorMessage.value = 'Password is required'
@@ -74,7 +74,7 @@ async function submit() {
           path: props.droppedFile,
           password: password.value
         }
-        open.value = false
+        emit('close')
       }
     } else {
       // For write: set the pending action directly — the encryptFile call will fail with wrong password
@@ -82,7 +82,7 @@ async function submit() {
         path: props.droppedFile,
         password: password.value
       }
-      open.value = false
+      emit('close')
     }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'An unexpected error occurred'
