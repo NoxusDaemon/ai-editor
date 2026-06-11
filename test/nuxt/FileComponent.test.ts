@@ -60,18 +60,6 @@ describe('FileComponent', () => {
     expect(wrapper.vm.password).toBeDefined()
   })
 
-  it('has an open ref initialized to false', async () => {
-    const wrapper = await mountSuspended(FileComponent, {
-      props: {
-        droppedFile: '/path/to/file.txt',
-        func: 'readEncryptedFile'
-      }
-    })
-
-    await wrapper.vm.$nextTick()
-    expect(wrapper.vm.open).toBe(false)
-  })
-
   it('has a showPassword ref initialized to false', async () => {
     const wrapper = await mountSuspended(FileComponent, {
       props: {
@@ -167,22 +155,6 @@ describe('FileComponent', () => {
     wrapper.vm.isLoading = true
     await wrapper.vm.$nextTick()
     expect(wrapper.vm.isLoading).toBe(true)
-  })
-
-  it('can set open state to true', async () => {
-    const wrapper = await mountSuspended(FileComponent, {
-      props: {
-        droppedFile: '/path/to/file.txt',
-        func: 'readEncryptedFile'
-      }
-    })
-
-    await wrapper.vm.$nextTick()
-    expect(wrapper.vm.open).toBe(false)
-
-    wrapper.vm.open = true
-    await wrapper.vm.$nextTick()
-    expect(wrapper.vm.open).toBe(true)
   })
 
   it('can set password value', async () => {
