@@ -1,24 +1,49 @@
 <template>
-
-  <UTabs v-model="activeTab" :items="totalJson" class="mt-2 w-full" :ui="{ list: 'sticky top-2 z-50' }">
+  <UTabs
+    v-model="activeTab"
+    :items="totalJson"
+    class="mt-2 w-full"
+    :ui="{ list: 'sticky top-2 z-50' }"
+  >
     <template #default="{ item, index }">
-      <div @click.middle.stop.prevent="deleteTab(index)" @dragover.stop.prevent="quickSwitchTabs" @click.stop >
+      <div
+        @click.middle.stop.prevent="deleteTab(index)"
+        @dragover.stop.prevent="quickSwitchTabs"
+        @click.stop
+      >
         {{ item.label }}
       </div>
     </template>
 
     <template #list-trailing>
-      <UButton icon="i-lucide-plus" @click="addTab" />
+      <UButton
+        icon="i-lucide-plus"
+        @click="addTab"
+      />
     </template>
 
     <template #content="{ index }">
       <div class="flex  justify-between">
-        <USwitch v-model="AutoSaveSwitch" label="Auto Save" class="m-2" />
+        <USwitch
+          v-model="AutoSaveSwitch"
+          label="Auto Save"
+          class="m-2"
+        />
         <UDropdownMenu :items="items">
-          <UButton label="Open" icon="i-lucide-menu" color="neutral" variant="outline" />
+          <UButton
+            label="Open"
+            icon="i-lucide-menu"
+            color="neutral"
+            variant="outline"
+          />
           <template #item="{ item }">
-            <UButton color="neutral" :icon="item.icon" variant="ghost" @click.prevent="item.function"
-              :label="item.label" />
+            <UButton
+              color="neutral"
+              :icon="item.icon"
+              variant="ghost"
+              :label="item.label"
+              @click.prevent="item.function"
+            />
           </template>
         </UDropdownMenu>
       </div>
@@ -98,14 +123,14 @@ async function writeEncryptedFile() {
 }
 
 const debouncedFn = useDebounceFn(async (newTotalJson) => {
-  console.log('autosave check', AutoSaveSwitch.value);
+  console.log('autosave check', AutoSaveSwitch.value)
 
   if (!AutoSaveSwitch.value) return
-  console.log('passed autosave');
+  console.log('passed autosave')
 
-  console.log('file path  check', dropperFile.value);
+  console.log('file path  check', dropperFile.value)
   if (!dropperFile.value) return
-  console.log('passed file path check');
+  console.log('passed file path check')
 
   if (statePassword.value) {
     console.log('wrote to encrypted file')
@@ -118,7 +143,7 @@ const debouncedFn = useDebounceFn(async (newTotalJson) => {
 }, 1000)
 
 watch(totalJson, (newTotalJson) => {
-  console.log('detected changes');
+  console.log('detected changes')
   debouncedFn(newTotalJson)
 }, { immediate: true, deep: true })
 
@@ -129,7 +154,7 @@ function quickSwitchTabs(tabEvent: DragEvent) {
 
 const getDefaultTab = () => {
   const newDefaultTab = structuredClone(toRaw(defaultTab))
-  newDefaultTab.promptsList.find((f) => f.key === 'User')!.content = 'Who are you, and what can you do?'
+  newDefaultTab.promptsList.find(f => f.key === 'User')!.content = 'Who are you, and what can you do?'
   return newDefaultTab
 }
 
@@ -158,5 +183,4 @@ function deleteTab(index: number) {
 
   totalJson.value.splice(index, 1)
 }
-
 </script>

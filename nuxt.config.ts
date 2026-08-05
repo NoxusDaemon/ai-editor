@@ -40,7 +40,7 @@ export default defineNuxtConfig({
         '@tauri-apps/api/webview',
         '@vueuse/core',
         '@tauri-apps/plugin-dialog',
-        '@vueuse/integrations/useSortable',
+        '@vueuse/integrations/useSortable'
       ]
     }
   },

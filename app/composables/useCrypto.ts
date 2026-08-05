@@ -27,7 +27,7 @@ export const useCrypto = () => {
     }
   }
 
-  const decrypt = async (cipherText: Uint8Array<ArrayBuffer> , password: string): Promise<unknown> => {
+  const decrypt = async (cipherText: Uint8Array<ArrayBuffer>, password: string): Promise<unknown> => {
     try {
       // No Base64 decoding needed anymore. Input is raw binary.
       return JSON.parse(await decryptCore(cipherText, password))
@@ -55,10 +55,10 @@ export const useCrypto = () => {
   }
 
   const encryptFile = async (path: string, password: string, dataToEncrypt: object) => {
-    try {     
+    try {
       if (!password || !useFileHandler().canWrite(path, password)) return
-      
-      // Pass binary Uint8Array directly to writeFile. 
+
+      // Pass binary Uint8Array directly to writeFile.
       // Ensure useFileHandler supports binary writes in your Tauri setup.
       await useFileHandler().writeFile(path, await encrypt(dataToEncrypt, password))
     } catch {
@@ -70,8 +70,8 @@ export const useCrypto = () => {
     try {
       // Ensure useFileHandler returns Uint8Array/Binary data here.
       // If it returns a string by default, you may need to adjust the file handler config.
-      const cipherText = await useFileHandler().readFile(path) as Uint8Array<ArrayBuffer> 
-      
+      const cipherText = await useFileHandler().readFile(path) as Uint8Array<ArrayBuffer>
+
       return await decrypt(cipherText, password)
     } catch {
       throw new Error('Decryption failed. Wrong password?')
@@ -107,13 +107,13 @@ const encryptCore = async (dataBuffer: ArrayBuffer, password: string): Promise<U
   combined.set(salt)
   combined.set(iv, salt.byteLength)
   combined.set(new Uint8Array(encryptedContent), salt.byteLength + iv.byteLength)
-  
+
   // Return raw binary instead of Base64 string
-  return combined 
+  return combined
 }
 
 // Derive a key from a password (Useful if you want a user to type a password)
-const deriveKey = async (password: string, salt: Uint8Array<ArrayBuffer> ): Promise<CryptoKey> => {
+const deriveKey = async (password: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> => {
   const enc = new TextEncoder()
   const keyMaterial = await window.crypto.subtle.importKey(
     'raw',
