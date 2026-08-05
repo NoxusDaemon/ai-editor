@@ -15,13 +15,11 @@ export const useFileHandler = () => {
   const canWrite = async (path: string, password: string) => {
     let result
     try {
-      // @ts-expect-error
-      const res = await readExact(path, 29).toBase64()
+      const res = (await readExact(path, 29)).toBase64()
       // Probably Empty
       if (res.startsWith('AAAAAAAAAAAAAAAAAAAAAAA')) return true
 
-      // @ts-expect-error
-      result = Uint8Array.fromBase64(res.toBase64())
+      result = Uint8Array.fromBase64(res)
     } catch {
       // Probably file does not exist or empty can write
       return true

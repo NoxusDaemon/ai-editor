@@ -13,23 +13,26 @@
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {
-    "@iconify-json/lucide": "^1.2.101",
-    "@iconify-json/simple-icons": "^1.2.76",
+    "@iconify-json/lucide": "^1.2.121",
+    "@iconify-json/simple-icons": "^1.2.93",
     "@lmstudio/sdk": "^1.5.0",
-    "@nuxt/ui": "^4.6.1",
-    "@tauri-apps/api": "^2.10.1",
-    "@tauri-apps/plugin-dialog": "~2.7.0",
-    "@tauri-apps/plugin-fs": "^2.5.0",
-    "@tauri-apps/plugin-opener": "^2.5.3",
-    "nuxt": "^4.4.2",
+    "@nuxt/ui": "^4.10.0",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "~2.7.2",
+    "@tauri-apps/plugin-fs": "^2.5.1",
+    "@tauri-apps/plugin-opener": "^2.5.4",
+    "nuxt": "^4.5.2",
     "sortablejs": "^1.15.7",
-    "tailwindcss": "^4.2.2"
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
-    "@nuxt/eslint": "^1.15.2",
-    "eslint": "^10.2.0",
-    "typescript": "^6.0.2",
-    "vue-tsc": "^3.2.6",
-    "@tauri-apps/cli": "^2.10.1"
-  }
+    "@nuxt/eslint": "^1.16.0",
+    "@tauri-apps/cli": "^2.11.4",
+    "eslint": "^10.8.0",
+    "typescript": "~6.0.0",
+    "vue-tsc": "^3.3.9"
+  },
+  "trustedDependencies": [
+    "unrs-resolver"
+  ]
 }

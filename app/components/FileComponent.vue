@@ -40,20 +40,50 @@
 const showPassword = ref(false)
 const password = ref('')
 const props = defineProps<{ droppedFile: string, func: string }>()
-const overlayResult = useState<{ [id: string]: { path: string, password?: string } }>('overlayResult', () => ({}))
+const overlayResult = useState<{ [id: string]: { path?: string, password?: string, data?: object } }>('overlayResult', () => ({}))
 
 const open = ref(false)
 
 async function submit() {
-  const canWrite = await useFileHandler().canWrite(props.droppedFile, password.value)
+  // Check if this is a dropped file (in-memory data)
+  const isDropped = props.droppedFile.startsWith('dropped:')
 
-  if (canWrite) {
-    overlayResult.value[props.func] = {
-      path: props.droppedFile,
-      password: password.value
+  if (props.func === 'readEncryptedFile') {
+    if (isDropped) {
+      // Decrypt from in-memory data
+      const droppedFileData = useState<{ data: Uint8Array, name: string }>('droppedFileData', () => ({ data: new Uint8Array(), name: '' }))
+      const data = await useCrypto().decryptData(droppedFileData.value.data, password.value)
+      if (data) {
+      // Clear the dropped data
+        droppedFileData.value = { data: new Uint8Array(), name: '' }
+        overlayResult.value[props.func] = {
+          password: password.value,
+          data
+        }
+      }
+    } else {
+      // Decrypt from file path
+      await useCrypto().decryptFile(props.droppedFile, password.value)
+      overlayResult.value[props.func] = {
+        path: props.droppedFile,
+        password: password.value
+      }
     }
+
     console.log({ overlayResult })
     emit('close', false)
+  } else {
+    // writeEncryptedFile - only works with file paths
+    const canWrite = await useFileHandler().canWrite(props.droppedFile, password.value)
+
+    if (canWrite) {
+      overlayResult.value[props.func] = {
+        path: props.droppedFile,
+        password: password.value
+      }
+      console.log({ overlayResult })
+      emit('close', false)
+    }
   }
 }
 

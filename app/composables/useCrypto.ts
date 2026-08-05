@@ -78,9 +78,19 @@ export const useCrypto = () => {
     }
   }
 
+  // Decrypt raw Uint8Array data (for dropped files that are already in memory)
+  const decryptData = async (data: Uint8Array<ArrayBufferLike>, password: string): Promise<unknown> => {
+    try {
+      return await decrypt(data as Uint8Array<ArrayBuffer>, password)
+    } catch {
+      throw new Error('Decryption failed. Wrong password or corrupted data.')
+    }
+  }
+
   return {
     decrypt,
     decryptCore,
+    decryptData,
     decryptFile,
     encrypt,
     encryptFile,
