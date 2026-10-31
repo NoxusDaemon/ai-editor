@@ -1,101 +1,100 @@
 # AI Editor
 
-A secure desktop application for managing AI chat sessions with encrypted file storage. Built with Nuxt 4, Tauri v2, and Vue 3.
+A desktop editor for composing prompts and running them against local models in [LM Studio](https://lmstudio.ai). Build a conversation out of system, user and assistant blocks, keep reusable snippets beside it, and save the whole workspace as JSON or as a password-encrypted file.
+
+Built with Nuxt 4, Nuxt UI 4, Pinia and Tauri 2.
 
 ## Features
 
-- **Encrypted File Storage** - Password-protected AES-GCM encryption for your chat data
-- **Multi-tab Interface** - Manage multiple conversation sessions simultaneously
-- **Auto-save** - Automatic debounced saving of your work (encrypted or plain JSON)
-- **File Operations** - Open, export, and save encrypted files with password protection
-- **LM Studio Integration** - Connect to local AI models via LM Studio SDK
-- **Drag-to-Switch Tabs** - Quick navigation by dragging over tab headers
-- **Cross-platform Desktop App** - Runs on Windows, macOS, and Linux
+- **Prompt blocks** – system, user and assistant messages in a rich Markdown editor. Drag to reorder, change a block's role, copy or remove it.
+- **Snippets** – a tray of reusable text. Drag a snippet into any prompt or click to copy it. Snippets are never sent to the model.
+- **Sessions** – one tab per conversation. Double-click or press F2 to rename, right-click to duplicate, middle-click to close. Hovering over a tab while dragging text switches to it.
+- **Streaming replies** – press Send (Ctrl/⌘ + Enter) to stream a reply into the trailing empty assistant block, or a new one. Stop at any time and keep the partial text. Reasoning ("thinking") output is shown separately and never saved. Tokens per second are shown when it finishes.
+- **Files** – open, save, save as JSON, or save encrypted. Drop a file anywhere on the window to open it. Files from earlier versions of the app (plain or encrypted) still open.
+- **Autosave** – optional, debounced, and only for files that have a location on disk.
+- **Safety nets** – confirmation before discarding unsaved changes, closing a session with content, or quitting with unsaved work.
+- Light and dark themes, keyboard shortcuts, works offline.
 
-## Tech Stack
+### Keyboard shortcuts
 
-- **Frontend**: Nuxt 4, Vue 3, TypeScript, Tailwind CSS v4
-- **UI Components**: Nuxt UI v4
-- **Desktop Framework**: Tauri v2 (Rust backend)
-- **Encryption**: Web Crypto API (AES-GCM with PBKDF2 key derivation)
-- **Package Manager**: Bun
+| Action | Shortcut |
+| --- | --- |
+| Send / stop | Ctrl/⌘ + Enter |
+| Save | Ctrl/⌘ + S |
+| Save as JSON | Ctrl/⌘ + Shift + S |
+| Open | Ctrl/⌘ + O |
+| New session | Ctrl/⌘ + T |
+| Rename / close focused tab | F2 / Delete |
 
-## Prerequisites
+## Getting started
 
-- [Bun](https://bun.sh/) - JavaScript runtime and package manager
-- [Rust](https://www.rust-lang.org/tools/install) - For Tauri backend compilation
-- System dependencies for Tauri (see [Tauri docs](https://tauri.app/v1/guides/getting-started/prerequisites))
-
-## Installation
+Prerequisites: [Bun](https://bun.sh), [Rust](https://www.rust-lang.org/tools/install) and the [Tauri system dependencies](https://v2.tauri.app/start/prerequisites/). For generation, LM Studio with its local server enabled and **CORS turned on** (`lms server start --cors`).
 
 ```bash
-# Clone the repository
-git clone <your-repo-url>
-cd ai-editor
-
-# Install dependencies
 bun install
+bun run tauri:dev     # desktop app with hot reload
+bun run dev           # the same UI in a browser at http://localhost:3000
 ```
 
-## Development
+In the browser, files are opened and saved with the File System Access API (Chromium) or plain upload/download elsewhere.
 
-### Web Development Mode (Nuxt only)
-```bash
-bun run dev
-```
+The LM Studio address defaults to `ws://127.0.0.1:1234` and can be changed in Settings (the gear icon).
 
-### Desktop Development Mode (Tauri + Nuxt)
-```bash
-bun run tauri:dev
-```
+## Scripts
 
-## Building for Production
+| Command | What it does |
+| --- | --- |
+| `bun run test` | All tests (~3 s): unit tests in Node plus component tests in a Nuxt environment |
+| `bun run test:watch` | Tests in watch mode |
+| `bun run lint` / `lint:fix` | ESLint (Nuxt config with stylistic rules) |
+| `bun run typecheck` | `vue-tsc` over the app and tests |
+| `bun run check` | Lint, typecheck and test |
+| `bun run build` | Static frontend in `.output/public` |
+| `bun run tauri:build` | Desktop installers in `src-tauri/target/release/bundle/` |
 
-### Build Desktop Application
-```bash
-bun run tauri:build
-```
-
-The compiled binaries will be in `src-tauri/target/release/bundle/`.
-
-### Build Web Version Only
-```bash
-bun run build
-bun run preview
-```
-
-## Usage
-
-1. **Create a New Tab** - Click the + button to add conversation sessions
-2. **Configure Prompts** - Edit system, user, and assistant prompts in each tab
-3. **Save Encrypted** - Use "Save & Enc File" from the menu to save with password protection
-4. **Open Encrypted Files** - Select "Open Encrypted File" and enter your password
-5. **Auto-save** - Toggle auto-save switch for automatic file updates
-
-## Project Structure
+## Architecture
 
 ```
-├── app/
-│   ├── components/       # Vue components (Tabs, Editor, File dialogs)
-│   ├── composables/      # Reusable logic (useCrypto, useFileHandler)
-│   ├── constants/        # Default configurations
-│   └── pages/            # Nuxt page routes
-├── src-tauri/
-│   ├── src/
-│   │   ├── commands.rs   # Tauri backend commands
-│   │   ├── lib.rs        # Tauri application setup
-│   │   └── main.rs       # Application entry point
-│   ├── capabilities/     # Permission configurations
-│   └── tauri.conf.json   # Tauri configuration
-├── package.json
-└── nuxt.config.ts
+app/
+├── lib/          Pure domain logic, no Vue or I/O (fully unit-tested)
+│   ├── workspace.ts   Sessions, blocks, and what gets sent to the model
+│   ├── schema.ts      File format validation (zod) and migration from v1 files
+│   ├── document.ts    Bytes ⇄ workspace, detecting JSON vs encrypted files
+│   ├── crypto.ts      PBKDF2 + AES-GCM envelope
+│   └── batch.ts       Coalesces streamed tokens into periodic UI updates
+├── services/     Side effects behind interfaces
+│   ├── files.ts       Tauri dialogs + fs plugin, or browser file APIs
+│   ├── llm.ts         LM Studio SDK (lazy-loaded)
+│   └── container.ts   Service registry, so stores can be tested with fakes
+├── stores/       Pinia stores
+│   ├── workspace.ts   Sessions and every edit to them
+│   ├── document.ts    Open/save/encryption, dirty tracking, autosave
+│   ├── generation.ts  Model list, streaming, cancellation
+│   └── settings.ts    Per-device preferences (localStorage)
+├── plugins/services.ts  Wires real services, modals and toasts into the registry
+├── composables/  Shortcuts, file drop target, window title and close guard
+└── components/   UI (Nuxt UI)
+src-tauri/        Tauri shell: dialog + fs plugins only, no custom commands
+test/unit/        Node tests for lib, services and stores
+test/nuxt/        Component tests rendered in a real Nuxt app
 ```
 
-## Security Notes
+Data flows one way: components read store state and call store actions; stores use services; services touch the outside world.
 
-- Encryption uses AES-GCM with 256-bit keys derived via PBKDF2 (100,000 iterations)
-- Passwords are never stored - you must enter them when opening encrypted files
-- For production use, consider additional security measures for key storage
+## File format and security
+
+Workspaces are saved as JSON:
+
+```json
+{ "format": "ai-editor", "version": 2, "sessions": [{ "id": "…", "title": "…", "model": "…", "blocks": [] }] }
+```
+
+Encrypted files (`.aienc`) start with an `AIEDITOR` header recording the format version and PBKDF2 iteration count, followed by a random salt, IV and the AES-256-GCM ciphertext. The header is authenticated, so tampering is detected.
+
+- Keys are derived with PBKDF2-SHA256 at 600,000 iterations (OWASP 2023). The derived key is kept non-extractable in memory and reused for autosaves; the password itself is not stored.
+- Files from the original app (100,000 iterations, no header) still open and are upgraded to the new format on the next save.
+- The desktop app can only read or write files the user picked in a dialog: there are no custom file commands, and the fs plugin's scope is limited to dialog selections.
+- A strict Content Security Policy limits network access to the app itself and local LM Studio servers. Icons are bundled, so nothing is fetched from the internet at runtime.
 
 ## License
 

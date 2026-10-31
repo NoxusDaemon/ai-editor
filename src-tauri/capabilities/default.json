@@ -1,13 +1,17 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Main window. File access is limited to files the user picks in an open/save dialog.",
   "windows": [
     "main"
   ],
   "permissions": [
     "core:default",
-    "opener:default",
-    "dialog:default"
+    "core:window:allow-set-title",
+    "core:window:allow-destroy",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "fs:allow-read-file",
+    "fs:allow-write-file"
   ]
 }

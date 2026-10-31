@@ -1,26 +1,36 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ai-editor",
-  "version": "0.1.0",
+  "productName": "AI Editor",
+  "version": "../package.json",
   "identifier": "org.nightly.ai-editor",
   "build": {
-    "beforeDevCommand": "nuxt dev",
+    "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "nuxt build",
+    "beforeBuildCommand": "bun run build",
     "frontendDist": "../.output/public"
   },
   "app": {
-    "withGlobalTauri": true,
     "windows": [
       {
-        "title": "ai-editor",
-        "width": 800,
-        "height": 600,
+        "label": "main",
+        "title": "AI Editor",
+        "width": 1200,
+        "height": 820,
+        "minWidth": 640,
+        "minHeight": 480,
         "dragDropEnabled": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob:",
+        "font-src": "'self' data:",
+        "connect-src": "'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*"
+      },
+      "dangerousDisableAssetCspModification": ["style-src"]
     }
   },
   "bundle": {

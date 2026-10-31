@@ -2,48 +2,66 @@
 export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
-    '@nuxt/ui'
+    '@nuxt/ui',
+    '@pinia/nuxt'
   ],
+
+  // Tauri serves a static bundle, so the app is a pure SPA.
   ssr: false,
 
   devtools: {
     enabled: true
   },
 
-  css: ['~/assets/css/main.css'],
-  // Avoids error [unhandledRejection] EMFILE: too many open files, watch
-  ignore: ['**/src-tauri/**'],
-
-  routeRules: {
-    '/': { prerender: true }
+  app: {
+    head: {
+      title: 'AI Editor',
+      htmlAttrs: { lang: 'en' }
+    }
   },
 
-  compatibilityDate: '2025-01-15',
+  css: ['~/assets/css/main.css'],
+
+  // Avoids "EMFILE: too many open files" from watching the Rust target dir.
+  ignore: ['**/src-tauri/**'],
+
+  devServer: {
+    // Lets `tauri dev` reach the dev server from a phone/emulator when TAURI_DEV_HOST is set.
+    host: process.env.TAURI_DEV_HOST || 'localhost'
+  },
+
+  compatibilityDate: '2026-10-01',
 
   vite: {
-    // Better support for Tauri CLI output
+    // Keep Tauri CLI output visible.
     clearScreen: false,
-    // Enable environment variables
-    // Additional environment variables can be found at
     // https://v2.tauri.app/reference/environment-variables/
     envPrefix: ['VITE_', 'TAURI_'],
     server: {
-      // Tauri requires a consistent port
+      // Tauri expects the dev server on a fixed port.
       strictPort: true
     },
     optimizeDeps: {
       include: [
-        '@vue/devtools-core',
-        '@vue/devtools-kit',
         '@lmstudio/sdk',
         '@tauri-apps/api/core',
-        '@tauri-apps/api/webview',
-        '@vueuse/core',
+        '@tauri-apps/api/window',
         '@tauri-apps/plugin-dialog',
-        '@vueuse/integrations/useSortable'
+        '@tauri-apps/plugin-fs',
+        '@vueuse/core',
+        '@vueuse/integrations/useSortable',
+        'zod'
       ]
     }
   },
+
+  typescript: {
+    // test/nuxt is included by Nuxt; type-check the plain unit tests too.
+    tsConfig: {
+      include: ['../test/unit/**/*']
+    }
+  },
+
   telemetry: false,
 
   eslint: {
@@ -51,6 +69,18 @@ export default defineNuxtConfig({
       stylistic: {
         commaDangle: 'never',
         braceStyle: '1tbs'
+      }
+    }
+  },
+
+  icon: {
+    // The desktop app must work offline: bundle every icon we use instead of
+    // fetching them from the Iconify API at runtime.
+    provider: 'none',
+    fallbackToApi: false,
+    clientBundle: {
+      scan: {
+        globInclude: ['app/**/*.{vue,ts}']
       }
     }
   }
