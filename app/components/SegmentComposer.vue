@@ -13,7 +13,7 @@
             variant="outline"
             :aria-label="`Add ${BLOCK_META[type].label} block`"
             :data-testid="`add-${type}`"
-            @click="workspace.addBlock(session.id, type)"
+            @click="workspace.addBlock(sessionId, segment.id, type)"
           >
             <span class="hidden md:inline">{{ BLOCK_META[type].label }}</span>
           </UButton>
@@ -28,13 +28,8 @@
           :title="run?.error"
         >{{ statusText }}</span>
 
-        <ModelSelect
-          :model-value="session.model"
-          @update:model-value="model => workspace.setModel(session.id, model)"
-        />
-
         <UTooltip
-          :text="running ? 'Stop generating' : 'Generate a reply'"
+          :text="running ? 'Stop generating' : 'Try this segment on its own: streams a reply into its last empty assistant block'"
           :kbds="['meta', 'enter']"
         >
           <UButton
@@ -44,14 +39,15 @@
             color="error"
             variant="soft"
             data-testid="stop"
-            @click="generation.stop(session.id)"
+            @click="generation.stop(segment.id)"
           />
           <UButton
             v-else
             label="Send"
             icon="i-lucide-send-horizontal"
+            variant="soft"
             data-testid="send"
-            @click="generation.send(session.id)"
+            @click="generation.send(sessionId, segment.id)"
           />
         </UTooltip>
       </div>
@@ -60,15 +56,18 @@
 </template>
 
 <script setup lang="ts">
-import type { Session } from '~/lib/workspace'
+import type { SegmentNode } from '~/lib/flow/types'
 import { BLOCK_META, BLOCK_TYPES } from '~/utils/blocks'
 
-const props = defineProps<{ session: Session }>()
+const props = defineProps<{
+  sessionId: string
+  segment: SegmentNode
+}>()
 
 const workspace = useWorkspaceStore()
 const generation = useGenerationStore()
 
-const run = computed(() => generation.runs[props.session.id])
+const run = computed(() => generation.runs[props.segment.id])
 const running = computed(() => run.value?.status === 'running')
 
 const statusText = computed(() => {

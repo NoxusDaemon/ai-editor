@@ -22,7 +22,7 @@
         <span
           class="truncate"
           :title="generation.modelsError ?? undefined"
-        >{{ generation.modelsError ? 'LM Studio unreachable' : `${generation.models.length} models in LM Studio` }}</span>
+        >{{ generation.modelsError ? 'LM Studio unreachable' : `${options.length} ${kind === 'embedding' ? 'embedding ' : ''}models in LM Studio` }}</span>
         <UButton
           icon="i-lucide-refresh-cw"
           label="Refresh"
@@ -38,7 +38,15 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{ modelValue: string }>()
+const props = withDefaults(defineProps<{
+  modelValue: string
+  /** What an empty value means, e.g. "Inherit: qwen3-8b". */
+  emptyLabel?: string
+  kind?: 'llm' | 'embedding'
+}>(), {
+  emptyLabel: 'Any loaded model',
+  kind: 'llm'
+})
 const emit = defineEmits<{ 'update:modelValue': [model: string] }>()
 
 const generation = useGenerationStore()
@@ -47,12 +55,13 @@ const generation = useGenerationStore()
 const ANY = '__any__'
 
 const selected = computed(() => props.modelValue || ANY)
+const options = computed(() => props.kind === 'embedding' ? generation.embeddingModels : generation.models)
 
 const items = computed(() => {
-  const options = [{ label: 'Any loaded model', value: ANY }, ...generation.models]
-  if (props.modelValue && !generation.models.some(m => m.value === props.modelValue)) {
-    options.push({ label: props.modelValue, value: props.modelValue })
+  const list = [{ label: props.emptyLabel, value: ANY }, ...options.value]
+  if (props.modelValue && !options.value.some(m => m.value === props.modelValue)) {
+    list.push({ label: props.modelValue, value: props.modelValue })
   }
-  return options
+  return list
 })
 </script>

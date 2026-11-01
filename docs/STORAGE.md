@@ -4,7 +4,7 @@ Whether to move workspaces out of a single file and into a database, what it wou
 
 ## How persistence works today
 
-A workspace (`Session[]`, each with ordered message and snippet blocks) is saved as one file: plain JSON (format v2, `lib/schema.ts`) or a password-encrypted `.aienc` envelope (`lib/crypto.ts`, PBKDF2 600k → AES-256-GCM).
+A workspace (`Session[]`, each holding a flow of nodes, see [FLOWS.md](FLOWS.md)) is saved as one file: plain JSON (format v4, `lib/schema.ts`) or a password-encrypted `.aienc` envelope (`lib/crypto.ts`, PBKDF2 600k → AES-256-GCM).
 
 - **Path:** `stores/document.ts` → `lib/document.ts` (bytes ⇄ sessions, JSON vs encrypted detection) → `services/files.ts` (`FileSystem` interface: Tauri dialog + fs plugin).
 - **Every save rewrites the whole file.** `writeTo()` serialises all sessions, optionally encrypts them, and calls `writeFile`, which truncates and writes in place. It is not atomic.

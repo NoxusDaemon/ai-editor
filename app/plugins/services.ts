@@ -1,5 +1,6 @@
 import ConfirmModal from '~/components/ConfirmModal.vue'
 import PasswordModal from '~/components/PasswordModal.vue'
+import PromptModal from '~/components/PromptModal.vue'
 import { createClipboard } from '~/services/clipboard'
 import { provideServices } from '~/services/container'
 import { createFileSystem } from '~/services/files'
@@ -20,6 +21,7 @@ export default defineNuxtPlugin(() => {
   const settings = useSettingsStore()
   const passwordModal = overlay.create(PasswordModal)
   const confirmModal = overlay.create(ConfirmModal)
+  const promptModal = overlay.create(PromptModal)
 
   provideServices({
     files: createFileSystem(),
@@ -28,6 +30,7 @@ export default defineNuxtPlugin(() => {
     dialogs: {
       askPassword: async request => (await passwordModal.open(request).result) ?? null,
       confirm: async request => (await confirmModal.open(request).result) ?? false,
+      prompt: async request => (await promptModal.open(request).result) ?? null,
       notify: ({ color = 'info', ...notice }) => toast.add({ ...notice, color, icon: NOTICE_ICONS[color] })
     },
     clipboard: createClipboard()

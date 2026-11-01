@@ -8,7 +8,7 @@
       <SessionTabs />
       <div class="relative flex min-h-0 flex-1 overflow-hidden">
         <SnippetSidebar side="left" />
-        <SessionView
+        <FlowView
           :key="workspace.activeSession.id"
           :session="workspace.activeSession"
           class="min-w-0 flex-1"

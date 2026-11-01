@@ -23,7 +23,7 @@
         size="xs"
         class="w-32 font-medium"
         aria-label="Message role"
-        @update:model-value="role => workspace.setRole(sessionId, block.id, role)"
+        @update:model-value="role => workspace.setRole(sessionId, segmentId, block.id, role)"
       />
       <UBadge
         v-if="streaming"
@@ -78,7 +78,7 @@
       :model-value="block.content"
       :placeholder="meta.placeholder"
       :readonly="streaming"
-      @update:model-value="content => workspace.updateMessage(sessionId, block.id, { content })"
+      @update:model-value="content => workspace.updateMessage(sessionId, segmentId, block.id, { content })"
     />
   </section>
 </template>
@@ -89,6 +89,7 @@ import { BLOCK_META } from '~/utils/blocks'
 
 const props = defineProps<{
   sessionId: string
+  segmentId: string
   block: MessageBlock
   streaming?: boolean
   reasoning?: string

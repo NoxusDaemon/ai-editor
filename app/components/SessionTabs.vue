@@ -28,7 +28,7 @@
           @keydown="onKeydown($event, session)"
         >
           <UIcon
-            v-if="generation.isRunning(session.id)"
+            v-if="generation.isSessionBusy(session.id) || flowRun.isRunning(session.id)"
             name="i-lucide-loader-circle"
             class="size-3.5 shrink-0 animate-spin text-primary"
           />
@@ -63,33 +63,60 @@
       </UContextMenu>
     </div>
 
-    <UTooltip
-      text="New session"
-      :kbds="['meta', 't']"
-    >
-      <UButton
-        icon="i-lucide-plus"
-        color="neutral"
-        variant="ghost"
-        size="sm"
-        class="mb-1"
-        aria-label="New session"
-        data-testid="add-session"
-        @click="workspace.addSession()"
-      />
-    </UTooltip>
+    <div class="mb-1 flex items-center">
+      <UTooltip
+        text="New session"
+        :kbds="['meta', 't']"
+      >
+        <UButton
+          icon="i-lucide-plus"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          aria-label="New session"
+          data-testid="add-session"
+          @click="workspace.addSession()"
+        />
+      </UTooltip>
+      <UDropdownMenu
+        :items="templateItems"
+        :content="{ align: 'end' }"
+        :ui="{ content: 'w-80' }"
+      >
+        <UButton
+          icon="i-lucide-chevron-down"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          aria-label="New session from a template"
+          data-testid="add-session-template"
+        />
+      </UDropdownMenu>
+    </div>
   </nav>
 </template>
 
 <script setup lang="ts">
-import type { ContextMenuItem } from '@nuxt/ui'
+import type { ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
+import { FLOW_TEMPLATES } from '~/lib/flow/templates'
 import { sessionHasContent, type Session } from '~/lib/workspace'
 import { useServices } from '~/services/container'
 import { vSelectOnMount } from '~/utils/directives'
 
 const workspace = useWorkspaceStore()
 const generation = useGenerationStore()
+const flowRun = useFlowRunStore()
 const tablist = useTemplateRef('tablist')
+
+const templateItems: DropdownMenuItem[][] = [
+  [{ type: 'label', label: 'New session from a template' }],
+  FLOW_TEMPLATES.map(template => ({
+    label: template.title,
+    description: template.description,
+    icon: template.icon,
+    onSelect: () => workspace.addSession(template)
+  }))
+]
 
 const renamingId = ref<string | null>(null)
 const renameValue = ref('')
@@ -118,7 +145,7 @@ async function close(session: Session) {
   if (sessionHasContent(session)) {
     const confirmed = await useServices().dialogs.confirm({
       title: `Close ${session.title}?`,
-      description: 'Its prompts will be removed from the workspace.',
+      description: 'Its flow will be removed from the workspace.',
       confirmLabel: 'Close session',
       danger: true
     })

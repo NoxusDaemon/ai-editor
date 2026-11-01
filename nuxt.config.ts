@@ -19,7 +19,13 @@ export default defineNuxtConfig({
     }
   },
 
-  css: ['~/assets/css/main.css'],
+  css: [
+    '@vue-flow/core/dist/style.css',
+    '@vue-flow/controls/dist/style.css',
+    '@vue-flow/minimap/dist/style.css',
+    '@vue-flow/node-resizer/dist/style.css',
+    '~/assets/css/main.css'
+  ],
 
   // Avoids "EMFILE: too many open files" from watching the Rust target dir.
   ignore: ['**/src-tauri/**'],
@@ -49,6 +55,11 @@ export default defineNuxtConfig({
         '@tauri-apps/plugin-dialog',
         '@tauri-apps/plugin-fs',
         '@tiptap/pm/state',
+        '@vue-flow/background',
+        '@vue-flow/controls',
+        '@vue-flow/core',
+        '@vue-flow/minimap',
+        '@vue-flow/node-resizer',
         '@vueuse/core',
         '@vueuse/integrations/useSortable',
         'zod'

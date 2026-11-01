@@ -4,7 +4,9 @@
  * changes or a request fails.
  */
 import type { LMStudioClient } from '@lmstudio/sdk'
-import type { ChatMessage } from '~/lib/workspace'
+import type { ChatMessage, GenerateStats } from '~/lib/blocks'
+
+export type { GenerateStats }
 
 export interface ModelOption {
   label: string
@@ -18,18 +20,19 @@ export interface GenerateRequest {
   signal: AbortSignal
   onText: (delta: string) => void
   onReasoning?: (delta: string) => void
+  temperature?: number
+  maxTokens?: number
+  /** Constrains the reply to JSON matching this schema, where the model supports it. */
+  jsonSchema?: object
 }
 
-export interface GenerateStats {
-  stopReason: string
-  tokensPerSecond?: number
-  predictedTokens?: number
-  timeToFirstTokenSec?: number
-}
+export type ModelKind = 'llm' | 'embedding'
 
 export interface LlmProvider {
-  listModels(): Promise<ModelOption[]>
+  listModels(kind?: ModelKind): Promise<ModelOption[]>
   generate(request: GenerateRequest): Promise<GenerateStats>
+  /** One vector per text, in order. */
+  embed(model: string, texts: string[], signal?: AbortSignal): Promise<number[][]>
 }
 
 export const DEFAULT_LMSTUDIO_URL = 'ws://127.0.0.1:1234'
@@ -96,18 +99,23 @@ export function createLmStudioProvider(getServerUrl: () => string = () => ''): L
   }
 
   return {
-    listModels: () => withClient(async (c) => {
-      const models = await c.system.listDownloadedModels('llm')
+    listModels: (kind = 'llm') => withClient(async (c) => {
+      const models = kind === 'llm' ? await c.system.listDownloadedModels('llm') : await c.system.listDownloadedModels('embedding')
       return models
         .map(m => ({ label: m.displayName || m.modelKey, value: m.modelKey }))
         .sort((a, b) => a.label.localeCompare(b.label))
     }),
 
-    generate: ({ model, messages, signal, onText, onReasoning }) => withClient(async (c) => {
+    generate: ({ model, messages, signal, onText, onReasoning, temperature, maxTokens, jsonSchema }) => withClient(async (c) => {
       const llm = model ? await c.llm.model(model, { signal }) : await c.llm.model()
       signal.throwIfAborted()
 
-      const prediction = llm.respond(messages, { signal })
+      const prediction = llm.respond(messages, {
+        signal,
+        ...(temperature !== undefined && { temperature }),
+        ...(maxTokens !== undefined && { maxTokens }),
+        ...(jsonSchema && { structured: { type: 'json' as const, jsonSchema } })
+      })
       for await (const fragment of prediction) {
         if (fragment.reasoningType === 'none') onText(fragment.content)
         else if (fragment.reasoningType === 'reasoning') onReasoning?.(fragment.content)
@@ -119,6 +127,14 @@ export function createLmStudioProvider(getServerUrl: () => string = () => ''): L
         predictedTokens: stats.predictedTokensCount,
         timeToFirstTokenSec: stats.timeToFirstTokenSec
       }
+    }, signal),
+
+    embed: (model, texts, signal) => withClient(async (c) => {
+      if (!texts.length) return []
+      const embedder = await c.embedding.model(model, { signal })
+      signal?.throwIfAborted()
+      const results = await embedder.embed(texts)
+      return results.map(result => result.embedding)
     }, signal)
   }
 }

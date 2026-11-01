@@ -57,7 +57,7 @@
       :items="block.items"
       :arranging="arranging"
       class="p-3"
-      @update:items="items => workspace.setSnippets(sessionId, block.id, items)"
+      @update:items="items => workspace.setSnippets(sessionId, segmentId, block.id, items)"
     />
   </section>
 </template>
@@ -68,6 +68,7 @@ import { BLOCK_META } from '~/utils/blocks'
 
 defineProps<{
   sessionId: string
+  segmentId: string
   block: SnippetsBlock
 }>()
 

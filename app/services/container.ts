@@ -25,6 +25,13 @@ export interface ConfirmRequest {
   danger?: boolean
 }
 
+/** A question for the person running a flow (Ask nodes). */
+export interface PromptRequest {
+  title: string
+  description?: string
+  submitLabel?: string
+}
+
 export interface Notice {
   title: string
   description?: string
@@ -34,6 +41,8 @@ export interface Notice {
 export interface Dialogs {
   askPassword(request: PasswordRequest): Promise<string | null>
   confirm(request: ConfirmRequest): Promise<boolean>
+  /** The answer, or `null` if the person declined. */
+  prompt(request: PromptRequest): Promise<string | null>
   notify(notice: Notice): void
 }
 

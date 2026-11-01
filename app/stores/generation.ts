@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import { createBatcher } from '~/lib/batch'
+import { resolveSettings } from '~/lib/flow/graph'
 import { hasPrompt, planGeneration } from '~/lib/workspace'
 import { errorMessage, useServices } from '~/services/container'
 import type { GenerateStats, ModelOption } from '~/services/llm'
@@ -9,6 +10,7 @@ import { useWorkspaceStore } from './workspace'
 
 export interface GenerationRun {
   status: 'running' | 'done' | 'stopped' | 'error'
+  sessionId: string
   /** Assistant block receiving the reply. */
   blockId: string
   /** Model "thinking" output; shown live but never saved or sent back. */
@@ -21,26 +23,36 @@ export interface GenerationRun {
 
 export const STREAM_FLUSH_MS = 50
 
-/** Talking to the model: model list, streaming replies, cancellation. */
+/**
+ * The segment playground: streams a reply into a segment's blocks, as the
+ * classic editor did, with the model and sampling settings the segment
+ * inherits. Also owns the model lists. Running whole flows is `flowRun`.
+ */
 export const useGenerationStore = defineStore('generation', () => {
   const workspace = useWorkspaceStore()
   const settings = useSettingsStore()
 
-  /** Latest run per session id. Runtime-only state, never persisted. */
+  /** Latest run per segment id. Runtime-only state, never persisted. */
   const runs = ref<Record<string, GenerationRun>>({})
   const controllers = new Map<string, AbortController>()
 
   const models = ref<ModelOption[]>([])
+  const embeddingModels = ref<ModelOption[]>([])
   const modelsStatus = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const modelsError = ref<string | null>(null)
 
-  const isRunning = (sessionId: string) => runs.value[sessionId]?.status === 'running'
+  const isRunning = (segmentId: string) => runs.value[segmentId]?.status === 'running'
+  const isSessionBusy = (sessionId: string) =>
+    Object.values(runs.value).some(run => run.sessionId === sessionId && run.status === 'running')
 
   async function loadModels() {
     if (modelsStatus.value === 'loading') return
     modelsStatus.value = 'loading'
     try {
-      models.value = await useServices().llm.listModels()
+      const { llm } = useServices()
+      const [chat, embedding] = await Promise.all([llm.listModels('llm'), llm.listModels('embedding').catch(() => [])])
+      models.value = chat
+      embeddingModels.value = embedding
       modelsError.value = null
       modelsStatus.value = 'ready'
     } catch (error) {
@@ -49,12 +61,13 @@ export const useGenerationStore = defineStore('generation', () => {
     }
   }
 
-  async function send(sessionId: string) {
+  async function send(sessionId: string, segmentId: string) {
     const session = workspace.findSession(sessionId)
-    if (!session || isRunning(sessionId)) return
+    const segment = workspace.findSegment(sessionId, segmentId)
+    if (!session || !segment || isRunning(segmentId)) return
     const { llm, dialogs } = useServices()
 
-    const plan = planGeneration(session)
+    const plan = planGeneration(segment.blocks)
     if (!hasPrompt(plan)) {
       dialogs.notify({ title: 'Nothing to send', description: 'Write a system or user message first.', color: 'warning' })
       return
@@ -62,28 +75,31 @@ export const useGenerationStore = defineStore('generation', () => {
 
     const created = plan.targetBlockId === null
     const target = created
-      ? workspace.addBlock(sessionId, 'assistant')
-      : workspace.findBlock(sessionId, plan.targetBlockId!, 'message')
+      ? workspace.addBlock(sessionId, segmentId, 'assistant')
+      : workspace.findBlock(sessionId, segmentId, plan.targetBlockId!, 'message')
     if (!target) return
+    const { model, temperature, maxTokens } = resolveSettings(session.flow, session.model, segment)
 
     const controller = new AbortController()
-    controllers.set(sessionId, controller)
-    runs.value[sessionId] = { status: 'running', blockId: target.id, reasoning: '', startedAt: Date.now() }
-    const run = runs.value[sessionId]!
+    controllers.set(segmentId, controller)
+    runs.value[segmentId] = { status: 'running', sessionId, blockId: target.id, reasoning: '', startedAt: Date.now() }
+    const run = runs.value[segmentId]!
 
     let text = ''
     let reasoning = ''
     const batcher = createBatcher(() => {
       // Deleting the block mid-stream cancels the run.
-      if (!workspace.findBlock(sessionId, target.id, 'message')) return controller.abort()
-      workspace.updateMessage(sessionId, target.id, { content: text })
+      if (!workspace.findBlock(sessionId, segmentId, target.id, 'message')) return controller.abort()
+      workspace.streamMessage(sessionId, segmentId, target.id, text)
       run.reasoning = reasoning
     }, STREAM_FLUSH_MS)
 
     try {
       run.stats = await llm.generate({
-        model: session.model,
+        model,
         messages: plan.messages,
+        ...(temperature !== null && { temperature }),
+        ...(maxTokens !== null && { maxTokens }),
         signal: controller.signal,
         onText: (delta) => {
           text += delta
@@ -96,7 +112,7 @@ export const useGenerationStore = defineStore('generation', () => {
       })
       batcher.flush()
       run.status = controller.signal.aborted || run.stats.stopReason === 'userStopped' ? 'stopped' : 'done'
-      if (session.model) settings.defaultModel = session.model
+      if (model) settings.defaultModel = model
     } catch (error) {
       batcher.flush()
       if (controller.signal.aborted) {
@@ -106,31 +122,32 @@ export const useGenerationStore = defineStore('generation', () => {
         run.error = errorMessage(error)
         dialogs.notify({ title: 'Generation failed', description: run.error, color: 'error' })
       }
-      if (created && text === '') workspace.removeBlock(sessionId, target.id)
+      if (created && text === '') workspace.removeBlock(sessionId, segmentId, target.id)
     } finally {
       run.finishedAt = Date.now()
-      controllers.delete(sessionId)
+      controllers.delete(segmentId)
     }
   }
 
-  function stop(sessionId: string) {
-    controllers.get(sessionId)?.abort()
+  function stop(segmentId: string) {
+    controllers.get(segmentId)?.abort()
   }
 
-  function toggle(sessionId: string) {
-    if (isRunning(sessionId)) stop(sessionId)
-    else void send(sessionId)
+  function toggle(sessionId: string, segmentId: string) {
+    if (isRunning(segmentId)) stop(segmentId)
+    else void send(sessionId, segmentId)
   }
 
   // A different server has different models.
   watch(() => settings.lmStudioUrl, () => {
     models.value = []
+    embeddingModels.value = []
     modelsError.value = null
     modelsStatus.value = 'idle'
   })
 
-  // Closing a tab or opening another file cancels that session's generation.
-  watch(() => workspace.sessions.map(s => s.id), (ids) => {
+  // Closing a tab, deleting a segment or opening another file cancels its generation.
+  watch(() => workspace.sessions.flatMap(s => s.flow.nodes.filter(n => n.kind === 'segment').map(n => n.id)), (ids) => {
     const alive = new Set(ids)
     for (const [id, controller] of controllers) {
       if (!alive.has(id)) controller.abort()
@@ -138,5 +155,5 @@ export const useGenerationStore = defineStore('generation', () => {
     runs.value = Object.fromEntries(Object.entries(runs.value).filter(([id]) => alive.has(id)))
   })
 
-  return { runs, models, modelsStatus, modelsError, isRunning, loadModels, send, stop, toggle }
+  return { runs, models, embeddingModels, modelsStatus, modelsError, isRunning, isSessionBusy, loadModels, send, stop, toggle }
 })

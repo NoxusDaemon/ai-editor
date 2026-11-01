@@ -11,46 +11,56 @@
           data-testid="block-list"
         >
           <template
-            v-for="block in session.blocks"
+            v-for="block in segment.blocks"
             :key="block.id"
           >
             <MessageBlock
               v-if="block.kind === 'message'"
-              :session-id="session.id"
+              :session-id="sessionId"
+              :segment-id="segment.id"
               :block="block"
               :streaming="streamingBlockId === block.id"
               :reasoning="run?.blockId === block.id ? run.reasoning : ''"
-              @remove="workspace.removeBlock(session.id, block.id)"
+              @remove="workspace.removeBlock(sessionId, segment.id, block.id)"
             />
             <SnippetsBlock
               v-else
-              :session-id="session.id"
+              :session-id="sessionId"
+              :segment-id="segment.id"
               :block="block"
-              @remove="workspace.removeBlock(session.id, block.id)"
+              @remove="workspace.removeBlock(sessionId, segment.id, block.id)"
             />
           </template>
         </div>
 
         <UEmpty
-          v-if="!session.blocks.length"
+          v-if="!segment.blocks.length"
           icon="i-lucide-message-square-dashed"
-          title="This session is empty"
-          description="Add a system or user message below to start building a prompt."
+          title="No messages"
+          :description="segment.generate
+            ? 'This segment replies to the conversation so far. Add messages to steer it.'
+            : 'Add messages to put into the conversation.'"
           variant="naked"
           class="py-16"
         />
       </div>
     </div>
 
-    <SessionComposer :session="session" />
+    <SegmentComposer
+      :session-id="sessionId"
+      :segment="segment"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { insertNodeAt, removeNode, useSortable } from '@vueuse/integrations/useSortable'
-import type { Session } from '~/lib/workspace'
+import type { SegmentNode } from '~/lib/flow/types'
 
-const props = defineProps<{ session: Session }>()
+const props = defineProps<{
+  sessionId: string
+  segment: SegmentNode
+}>()
 
 const workspace = useWorkspaceStore()
 const generation = useGenerationStore()
@@ -58,10 +68,10 @@ const generation = useGenerationStore()
 const list = useTemplateRef('list')
 const scroller = useTemplateRef('scroller')
 
-const run = computed(() => generation.runs[props.session.id])
+const run = computed(() => generation.runs[props.segment.id])
 const streamingBlockId = computed(() => run.value?.status === 'running' ? run.value.blockId : null)
 
-useSortable(list, toRef(() => props.session.blocks), {
+useSortable(list, toRef(() => props.segment.blocks), {
   handle: '[data-drag-handle]',
   animation: 150,
   ghostClass: 'opacity-40',
@@ -73,13 +83,13 @@ useSortable(list, toRef(() => props.session.blocks), {
     // Put the DOM back and let Vue re-render from the store.
     removeNode(item)
     insertNodeAt(from, item, oldIndex!)
-    workspace.moveBlock(props.session.id, oldIndex!, newIndex!)
+    workspace.moveBlock(props.sessionId, props.segment.id, oldIndex!, newIndex!)
   }
 })
 
 // Follow a streaming reply, unless the user has scrolled up to read something else.
 const streamedLength = computed(() => {
-  const block = props.session.blocks.find(b => b.id === streamingBlockId.value)
+  const block = props.segment.blocks.find(b => b.id === streamingBlockId.value)
   return block?.kind === 'message' ? block.content.length + (run.value?.reasoning.length ?? 0) : 0
 })
 

@@ -21,3 +21,128 @@
 ::-ms-reveal {
   display: none;
 }
+
+/* ── Flow canvas (Vue Flow), themed with Nuxt UI's tokens so it follows light/dark mode ── */
+
+.flow-canvas {
+  --vf-node-bg: var(--ui-bg);
+  --vf-node-text: var(--ui-text);
+  --vf-connection-path: var(--ui-primary);
+  --vf-handle: var(--ui-border-accented);
+}
+
+.flow-canvas .vue-flow__node {
+  cursor: pointer;
+}
+
+.flow-canvas .vue-flow__node.dragging {
+  cursor: grabbing;
+}
+
+.flow-canvas .vue-flow__handle {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--ui-bg);
+  background: var(--ui-border-accented);
+  transition: scale 120ms, background-color 120ms;
+}
+
+.flow-canvas .vue-flow__handle:hover,
+.flow-canvas .vue-flow__handle.connecting,
+.flow-canvas .vue-flow__handle.valid {
+  background: var(--ui-primary);
+  scale: 1.25;
+}
+
+.flow-canvas .vue-flow__handle-right {
+  right: -7px;
+}
+
+.flow-canvas .vue-flow__handle-left {
+  left: -7px;
+}
+
+/* Context handles (memory and knowledge) are diamonds in the secondary colour, faint until needed. */
+.flow-canvas .vue-flow__handle.context-handle {
+  border-radius: 2px;
+  background: var(--ui-secondary);
+  rotate: 45deg;
+  opacity: 0.35;
+}
+
+.flow-canvas .vue-flow__node:hover .context-handle,
+.flow-canvas .vue-flow__handle.context-handle.connectionindicator:hover,
+.flow-canvas .vue-flow__handle.context-handle.connecting,
+.flow-canvas .vue-flow.connecting .context-handle,
+.flow-canvas .vue-flow__node.selected .context-handle {
+  opacity: 1;
+}
+
+.flow-canvas .vue-flow__handle.error-handle {
+  background: var(--ui-error);
+}
+
+.flow-canvas .flow-edge {
+  stroke: var(--ui-border-accented);
+  stroke-width: 2;
+}
+
+.flow-canvas .flow-edge--context {
+  stroke: var(--ui-secondary);
+  stroke-dasharray: 6 5;
+  opacity: 0.8;
+}
+
+.flow-canvas .flow-edge--taken {
+  stroke: var(--ui-primary);
+  stroke-width: 2.5;
+}
+
+.flow-canvas .flow-edge--selected,
+.flow-canvas .vue-flow__edge:hover .flow-edge {
+  stroke: var(--ui-primary);
+  stroke-width: 3;
+}
+
+.flow-canvas .vue-flow__connection-path {
+  stroke: var(--ui-primary);
+  stroke-width: 2;
+}
+
+.flow-canvas .vue-flow__selection,
+.flow-canvas .vue-flow__nodesselection-rect {
+  border: 1px dashed var(--ui-primary);
+  background: color-mix(in oklab, var(--ui-primary) 8%, transparent);
+}
+
+.flow-canvas .vue-flow__minimap {
+  background: var(--ui-bg-elevated);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  overflow: hidden;
+}
+
+.flow-canvas .vue-flow__controls {
+  border-radius: var(--ui-radius);
+  overflow: hidden;
+  box-shadow: none;
+  border: 1px solid var(--ui-border);
+}
+
+.flow-canvas .vue-flow__controls-button {
+  background: var(--ui-bg);
+  border-bottom: 1px solid var(--ui-border);
+  color: var(--ui-text);
+}
+
+.flow-canvas .vue-flow__controls-button:hover {
+  background: var(--ui-bg-elevated);
+}
+
+.flow-canvas .vue-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.flow-canvas .vue-flow__edge-textbg {
+  fill: var(--ui-bg);
+}

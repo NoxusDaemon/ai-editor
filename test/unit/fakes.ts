@@ -1,7 +1,7 @@
 import { vi } from 'vitest'
 import type { Clipboard } from '~/services/clipboard'
 import { provideServices, type Dialogs, type PasswordRequest } from '~/services/container'
-import type { FileRef, FileSystem } from '~/services/files'
+import type { FileRef, FileSystem, TextFile } from '~/services/files'
 import type { GenerateRequest, GenerateStats, LlmProvider, ModelOption } from '~/services/llm'
 import type { RecoverySnapshot, RecoveryStore } from '~/services/recovery'
 
@@ -12,6 +12,7 @@ export class FakeFiles implements FileSystem {
   nextSave: string | null = null
   failWrites = false
   writes: string[] = []
+  nextTextFiles: TextFile[] = []
 
   async pickAndRead() {
     const path = this.nextOpen
@@ -33,6 +34,10 @@ export class FakeFiles implements FileSystem {
     const bytes = this.disk.get(path)
     if (!bytes) throw new Error('File not found')
     return { ref: { name: path, path }, bytes }
+  }
+
+  async pickTextFiles() {
+    return this.nextTextFiles
   }
 }
 
@@ -59,11 +64,13 @@ export function createFakeServices() {
   const dialogs = {
     askPassword: vi.fn<Dialogs['askPassword']>(async () => null),
     confirm: vi.fn<Dialogs['confirm']>(async () => true),
+    prompt: vi.fn<Dialogs['prompt']>(async () => null),
     notify: vi.fn<Dialogs['notify']>()
   }
   const llm = {
-    listModels: vi.fn<() => Promise<ModelOption[]>>(async () => []),
-    generate: vi.fn<(request: GenerateRequest) => Promise<GenerateStats>>(async () => ({ stopReason: 'eosFound' }))
+    listModels: vi.fn<LlmProvider['listModels']>(async (): Promise<ModelOption[]> => []),
+    generate: vi.fn<(request: GenerateRequest) => Promise<GenerateStats>>(async () => ({ stopReason: 'eosFound' })),
+    embed: vi.fn<LlmProvider['embed']>(async (_model, texts) => texts.map(() => [1, 0]))
   } satisfies LlmProvider
 
   const clipboard = {

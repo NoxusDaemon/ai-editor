@@ -19,6 +19,12 @@ export interface OpenedFile {
   bytes: Uint8Array
 }
 
+/** A document imported into a knowledge node. */
+export interface TextFile {
+  name: string
+  text: string
+}
+
 export interface FileSystem {
   /** Asks the user for a file and reads it. `null` when cancelled. */
   pickAndRead(): Promise<OpenedFile | null>
@@ -28,6 +34,28 @@ export interface FileSystem {
   write(ref: FileRef, bytes: Uint8Array): Promise<void>
   /** Reads a file picked in an earlier session, e.g. from the recent files list. */
   reopen(path: string): Promise<OpenedFile>
+  /** Asks the user for text documents and reads them as plain text. Empty when cancelled. */
+  pickTextFiles(): Promise<TextFile[]>
+}
+
+/** Text formats a knowledge node can import. */
+export const TEXT_EXTENSIONS = ['txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'jsonl', 'xml', 'html', 'htm', 'log', 'yaml', 'yml']
+export const MAX_TEXT_FILE_BYTES = 10 * 1024 * 1024
+
+const HTML_ENTITIES: Record<string, string> = { '&nbsp;': ' ', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': '\'', '&amp;': '&' }
+
+/** Decodes a document; HTML is reduced to its visible text. */
+export function documentText(name: string, bytes: Uint8Array): string {
+  const text = new TextDecoder('utf-8').decode(bytes).replace(/^\uFEFF/, '')
+  if (!/\.html?$/i.test(name)) return text
+  return text
+    .replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<\/(?:p|div|li|h[1-6]|tr|section|article)>|<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&(?:nbsp|lt|gt|quot|#39|amp);/g, entity => HTML_ENTITIES[entity]!)
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n\s*/g, '\n\n')
+    .trim()
 }
 
 export const FILE_EXTENSIONS: Record<DocumentKind, string> = { json: 'json', encrypted: 'aienc' }
@@ -77,6 +105,25 @@ export function createFileSystem(): FileSystem {
     // Picked paths stay in the fs scope across restarts (persisted-scope plugin).
     async reopen(path) {
       return { ref: { name: basename(path), path }, bytes: await readFile(path) }
+    },
+
+    async pickTextFiles() {
+      const picked = await open({
+        multiple: true,
+        directory: false,
+        filters: [
+          { name: 'Text documents', extensions: TEXT_EXTENSIONS },
+          { name: 'All files', extensions: ['*'] }
+        ]
+      })
+      if (!picked) return []
+      const paths = Array.isArray(picked) ? picked : [picked]
+      return Promise.all(paths.map(async (path) => {
+        const name = basename(path)
+        const bytes = await readFile(path)
+        if (bytes.byteLength > MAX_TEXT_FILE_BYTES) throw new Error(`${name} is larger than 10 MB.`)
+        return { name, text: documentText(name, bytes) }
+      }))
     }
   }
 }

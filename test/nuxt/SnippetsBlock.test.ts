@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import SnippetsBlock from '~/components/SnippetsBlock.vue'
 import { createSection, createSnippet, type SnippetItem, type SnippetsBlock as Snippets } from '~/lib/workspace'
+import type { SegmentNode } from '~/lib/flow/types'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { SNIPPET_MIME } from '~/utils/snippets'
 import { mountInApp } from './mount'
@@ -9,9 +10,10 @@ async function mountSnippets(items: SnippetItem[]) {
   const workspace = useWorkspaceStore()
   workspace.replaceAll([])
   const session = workspace.activeSession
-  const block = session.blocks.find((b): b is Snippets => b.kind === 'snippets')!
-  workspace.setSnippets(session.id, block.id, items)
-  const wrapper = await mountInApp(SnippetsBlock, { sessionId: session.id, block })
+  const segment = session.flow.nodes.find((n): n is SegmentNode => n.kind === 'segment')!
+  const block = segment.blocks.find((b): b is Snippets => b.kind === 'snippets')!
+  workspace.setSnippets(session.id, segment.id, block.id, items)
+  const wrapper = await mountInApp(SnippetsBlock, { sessionId: session.id, segmentId: segment.id, block })
   return { wrapper, block }
 }
 
