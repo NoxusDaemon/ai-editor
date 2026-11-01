@@ -10,7 +10,7 @@ import {
   type DecryptedDocument
 } from '~/lib/document'
 import { serializeWorkspace } from '~/lib/schema'
-import type { Session } from '~/lib/workspace'
+import { createSidebars, type Workspace } from '~/lib/workspace'
 import { errorMessage, useServices } from '~/services/container'
 import { withExtension, type DocumentKind, type FileRef } from '~/services/files'
 import { useSettingsStore } from './settings'
@@ -35,7 +35,8 @@ export const useDocumentStore = defineStore('document', () => {
   let cipher: Cipher | null = null
   let writes: Promise<unknown> = Promise.resolve()
 
-  const snapshot = computed(() => serializeWorkspace(workspace.sessions))
+  const current = (): Workspace => ({ sessions: workspace.sessions, sidebars: workspace.sidebars })
+  const snapshot = computed(() => serializeWorkspace(current()))
   const savedSnapshot = ref(snapshot.value)
   const dirty = computed(() => snapshot.value !== savedSnapshot.value)
   const fileName = computed(() => file.value?.name ?? 'Untitled')
@@ -45,8 +46,8 @@ export const useDocumentStore = defineStore('document', () => {
     useServices().dialogs.notify({ title, description: errorMessage(error), color: 'error' })
   }
 
-  function adopt(sessions: Session[], ref: FileRef | null, nextCipher: Cipher | null) {
-    workspace.replaceAll(sessions)
+  function adopt(data: Workspace, ref: FileRef | null, nextCipher: Cipher | null) {
+    workspace.restore(data)
     file.value = ref
     cipher = nextCipher
     encrypted.value = nextCipher !== null
@@ -68,7 +69,7 @@ export const useDocumentStore = defineStore('document', () => {
 
   async function newWorkspace(): Promise<boolean> {
     if (!await confirmDiscard()) return false
-    adopt([], null, null)
+    adopt({ sessions: [], sidebars: createSidebars() }, null, null)
     return true
   }
 
@@ -77,7 +78,7 @@ export const useDocumentStore = defineStore('document', () => {
     try {
       const inspected = inspectDocument(bytes)
       if (inspected.kind === 'json') {
-        adopt(inspected.sessions, ref, null)
+        adopt(inspected.workspace, ref, null)
         return true
       }
 
@@ -98,7 +99,7 @@ export const useDocumentStore = defineStore('document', () => {
       })
       if (password === null || !unlocked) return false
       // Legacy files have no reusable cipher; saving upgrades them to the current format.
-      adopt(unlocked.sessions, ref, unlocked.cipher ?? await createCipher(password))
+      adopt(unlocked.workspace, ref, unlocked.cipher ?? await createCipher(password))
       return true
     } catch (error) {
       report(`Could not open ${ref.name}`, error)
@@ -131,8 +132,8 @@ export const useDocumentStore = defineStore('document', () => {
       const pending = snapshot.value
       try {
         const bytes = withCipher
-          ? await encodeEncryptedDocument(workspace.sessions, withCipher)
-          : encodeJsonDocument(workspace.sessions)
+          ? await encodeEncryptedDocument(current(), withCipher)
+          : encodeJsonDocument(current())
         await useServices().files.write(target, bytes)
         savedSnapshot.value = pending
         lastSavedAt.value = new Date()

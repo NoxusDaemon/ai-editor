@@ -46,8 +46,10 @@ export default defineNuxtConfig({
         '@lmstudio/sdk',
         '@tauri-apps/api/core',
         '@tauri-apps/api/window',
+        '@tauri-apps/plugin-clipboard-manager',
         '@tauri-apps/plugin-dialog',
         '@tauri-apps/plugin-fs',
+        '@tiptap/pm/state',
         '@vueuse/core',
         '@vueuse/integrations/useSortable',
         'zod'

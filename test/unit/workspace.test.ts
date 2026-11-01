@@ -3,6 +3,7 @@ import {
   createBlock,
   createDefaultSession,
   createSession,
+  createSnippet,
   duplicateSession,
   hasPrompt,
   nextSessionTitle,
@@ -59,7 +60,7 @@ describe('sessions', () => {
     copy.blocks.forEach((block, i) => expect(block.id).not.toBe(original.blocks[i]!.id))
 
     const snippets = copy.blocks.find(b => b.kind === 'snippets')!
-    snippets.items.push('only in the copy')
+    snippets.items.push(createSnippet('only in the copy'))
     expect(original.blocks.find(b => b.kind === 'snippets')!.items).toEqual([])
   })
 
@@ -67,6 +68,6 @@ describe('sessions', () => {
     const pristine = createDefaultSession()
     expect(sessionHasContent(pristine)).toBe(false)
     expect(sessionHasContent(createSession({ blocks: [message('system', 'rules')] }))).toBe(true)
-    expect(sessionHasContent(createSession({ blocks: [{ ...createBlock('snippets'), items: ['x'] } as Block] }))).toBe(true)
+    expect(sessionHasContent(createSession({ blocks: [{ ...createBlock('snippets'), items: [createSnippet('x')] } as Block] }))).toBe(true)
   })
 })

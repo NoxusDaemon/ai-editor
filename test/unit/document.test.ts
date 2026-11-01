@@ -2,9 +2,9 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { createCipher, cryptoSettings, DecryptionError } from '~/lib/crypto'
 import { decryptDocument, encodeEncryptedDocument, encodeJsonDocument, inspectDocument } from '~/lib/document'
 import { InvalidDocumentError } from '~/lib/schema'
-import { createDefaultSession } from '~/lib/workspace'
+import { createDefaultSession, createSidebars } from '~/lib/workspace'
 
-const sessions = [createDefaultSession('Only')]
+const workspace = { sessions: [createDefaultSession('Only')], sidebars: createSidebars() }
 
 describe('document codec', () => {
   beforeAll(() => {
@@ -12,21 +12,21 @@ describe('document codec', () => {
   })
 
   it('reads plain JSON workspaces immediately', () => {
-    const inspected = inspectDocument(encodeJsonDocument(sessions))
-    expect(inspected).toEqual({ kind: 'json', sessions })
+    const inspected = inspectDocument(encodeJsonDocument(workspace))
+    expect(inspected).toEqual({ kind: 'json', workspace })
   })
 
   it('writes human-readable JSON', () => {
-    const text = new TextDecoder().decode(encodeJsonDocument(sessions))
+    const text = new TextDecoder().decode(encodeJsonDocument(workspace))
     expect(text).toContain('\n  "format": "ai-editor"')
   })
 
   it('recognises encrypted workspaces and decrypts them', async () => {
-    const bytes = await encodeEncryptedDocument(sessions, await createCipher('pw'))
+    const bytes = await encodeEncryptedDocument(workspace, await createCipher('pw'))
     expect(inspectDocument(bytes)).toEqual({ kind: 'encrypted' })
 
     const decrypted = await decryptDocument(bytes, 'pw')
-    expect(decrypted.sessions).toEqual(sessions)
+    expect(decrypted.workspace).toEqual(workspace)
     expect(decrypted.cipher).not.toBeNull()
     await expect(decryptDocument(bytes, 'nope')).rejects.toBeInstanceOf(DecryptionError)
   })

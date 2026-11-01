@@ -84,7 +84,6 @@
 </template>
 
 <script setup lang="ts">
-import { useClipboard } from '@vueuse/core'
 import { MESSAGE_ROLES, type MessageBlock } from '~/lib/workspace'
 import { BLOCK_META } from '~/utils/blocks'
 
@@ -98,7 +97,7 @@ const props = defineProps<{
 const emit = defineEmits<{ remove: [] }>()
 
 const workspace = useWorkspaceStore()
-const { copy, copied } = useClipboard({ legacy: true })
+const { copy, copied } = useCopyButton()
 
 const meta = computed(() => BLOCK_META[props.block.role])
 const roleItems = MESSAGE_ROLES.map(role => ({ label: BLOCK_META[role].label, value: role, icon: BLOCK_META[role].icon }))

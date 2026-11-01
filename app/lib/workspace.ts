@@ -14,11 +14,27 @@ export interface MessageBlock {
   content: string
 }
 
+/** A reusable piece of text that can be dragged into a prompt. */
+export interface Snippet {
+  id: string
+  kind: 'snippet'
+  text: string
+}
+
+/** A named divider: the snippets after it, up to the next one, form a section. */
+export interface SnippetSection {
+  id: string
+  kind: 'section'
+  title: string
+}
+
+export type SnippetItem = Snippet | SnippetSection
+
 /** A tray of reusable text snippets. Never sent to the model. */
 export interface SnippetsBlock {
   id: string
   kind: 'snippets'
-  items: string[]
+  items: SnippetItem[]
 }
 
 export type Block = MessageBlock | SnippetsBlock
@@ -29,6 +45,18 @@ export interface Session {
   /** LM Studio model key. Empty means "whichever model is loaded". */
   model: string
   blocks: Block[]
+}
+
+export const SIDEBAR_SIDES = ['left', 'right'] as const
+export type SidebarSide = (typeof SIDEBAR_SIDES)[number]
+
+/** Snippet trays at the window edges, shared by every session in the workspace. */
+export type Sidebars = Record<SidebarSide, SnippetItem[]>
+
+/** Everything a workspace file holds. */
+export interface Workspace {
+  sessions: Session[]
+  sidebars: Sidebars
 }
 
 export interface ChatMessage {
@@ -45,6 +73,23 @@ export interface GenerationPlan {
 export const DEFAULT_USER_PROMPT = 'Who are you, and what can you do?'
 
 export const createId = (): string => crypto.randomUUID()
+
+export const createSnippet = (text = ''): Snippet => ({ id: createId(), kind: 'snippet', text })
+
+export const createSection = (title = ''): SnippetSection => ({ id: createId(), kind: 'section', title })
+
+export const createSidebars = (): Sidebars => ({ left: [], right: [] })
+
+/** Copies snippet items with fresh ids. */
+export const copySnippetItems = (items: readonly SnippetItem[]): SnippetItem[] =>
+  items.map(item => ({ ...item, id: createId() }))
+
+/** A copy of `items` with the item at `from` moved to `to`. */
+export function moveItem<T>(items: readonly T[], from: number, to: number): T[] {
+  const next = [...items]
+  next.splice(to, 0, ...next.splice(from, 1))
+  return next
+}
 
 export function createBlock(type: BlockType, content = ''): Block {
   if (type === 'snippets') return { id: createId(), kind: 'snippets', items: [] }
@@ -80,7 +125,7 @@ export function duplicateSession(session: Session, title: string): Session {
     title,
     model: session.model,
     blocks: session.blocks.map(block => block.kind === 'snippets'
-      ? { ...block, id: createId(), items: [...block.items] }
+      ? { ...block, id: createId(), items: copySnippetItems(block.items) }
       : { ...block, id: createId() })
   }
 }

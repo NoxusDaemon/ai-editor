@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import {
   createBlock,
   createDefaultSession,
+  createSidebars,
   duplicateSession,
   nextSessionTitle,
   type Block,
@@ -10,16 +11,20 @@ import {
   type MessageBlock,
   type MessageRole,
   type Session,
-  type SnippetsBlock
+  type SidebarSide,
+  type Sidebars,
+  type SnippetItem,
+  type Workspace
 } from '~/lib/workspace'
 import { useSettingsStore } from './settings'
 
-/** The open sessions (tabs) and every edit made to them. */
+/** The open sessions (tabs), the snippet sidebars, and every edit made to them. */
 export const useWorkspaceStore = defineStore('workspace', () => {
   const settings = useSettingsStore()
 
   const sessions = ref<Session[]>([createDefaultSession('Session 1', settings.defaultModel)])
   const activeId = ref(sessions.value[0]!.id)
+  const sidebars = ref<Sidebars>(createSidebars())
 
   const activeSession = computed(() => sessions.value.find(s => s.id === activeId.value) ?? sessions.value[0]!)
 
@@ -105,21 +110,32 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     updateMessage(sessionId, blockId, { role })
   }
 
-  function setSnippets(sessionId: string, blockId: string, items: SnippetsBlock['items']) {
+  function setSnippets(sessionId: string, blockId: string, items: SnippetItem[]) {
     const block = findBlock(sessionId, blockId, 'snippets')
     if (block) block.items = items
   }
 
-  /** Replaces every session, e.g. after opening a file. Never leaves the workspace empty. */
+  function setSidebar(side: SidebarSide, items: SnippetItem[]) {
+    sidebars.value[side] = items
+  }
+
+  /** Replaces every session. Never leaves the workspace empty. */
   function replaceAll(next: Session[]) {
     sessions.value = next.length ? next : [createDefaultSession('Session 1', settings.defaultModel)]
     activeId.value = sessions.value[0]!.id
+  }
+
+  /** Replaces everything, e.g. after opening a file. */
+  function restore(next: Workspace) {
+    replaceAll(next.sessions)
+    sidebars.value = next.sidebars
   }
 
   return {
     sessions,
     activeId,
     activeSession,
+    sidebars,
     findSession,
     findBlock,
     select,
@@ -134,6 +150,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     updateMessage,
     setRole,
     setSnippets,
-    replaceAll
+    setSidebar,
+    replaceAll,
+    restore
   }
 })

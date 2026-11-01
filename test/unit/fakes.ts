@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import type { Clipboard } from '~/services/clipboard'
 import { provideServices, type Dialogs, type PasswordRequest } from '~/services/container'
 import type { FileRef, FileSystem } from '~/services/files'
 import type { GenerateRequest, GenerateStats, LlmProvider, ModelOption } from '~/services/llm'
@@ -44,7 +45,13 @@ export function createFakeServices() {
     generate: vi.fn<(request: GenerateRequest) => Promise<GenerateStats>>(async () => ({ stopReason: 'eosFound' }))
   } satisfies LlmProvider
 
-  provideServices({ files, dialogs, llm })
+  const clipboard = {
+    readText: vi.fn<Clipboard['readText']>(async () => null),
+    writeSecret: vi.fn<NonNullable<Clipboard['writeSecret']>>(async () => {}),
+    clear: vi.fn<Clipboard['clear']>(async () => {})
+  }
+
+  provideServices({ files, dialogs, llm, clipboard })
 
   /** Answers password prompts like the real dialog: tries each password until `verify` accepts one. */
   function answerPasswords(...passwords: string[]) {
@@ -56,5 +63,5 @@ export function createFakeServices() {
     })
   }
 
-  return { files, dialogs, llm, answerPasswords }
+  return { files, dialogs, llm, clipboard, answerPasswords }
 }

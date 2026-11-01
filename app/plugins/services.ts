@@ -1,5 +1,6 @@
 import ConfirmModal from '~/components/ConfirmModal.vue'
 import PasswordModal from '~/components/PasswordModal.vue'
+import { createClipboard } from '~/services/clipboard'
 import { provideServices } from '~/services/container'
 import { createFileSystem } from '~/services/files'
 import { createLmStudioProvider } from '~/services/llm'
@@ -26,6 +27,7 @@ export default defineNuxtPlugin(() => {
       askPassword: async request => (await passwordModal.open(request).result) ?? null,
       confirm: async request => (await confirmModal.open(request).result) ?? false,
       notify: ({ color = 'info', ...notice }) => toast.add({ ...notice, color, icon: NOTICE_ICONS[color] })
-    }
+    },
+    clipboard: createClipboard()
   })
 })

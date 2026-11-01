@@ -6,11 +6,15 @@
     <div class="flex h-dvh flex-col overflow-hidden">
       <AppHeader />
       <SessionTabs />
-      <SessionView
-        :key="workspace.activeSession.id"
-        :session="workspace.activeSession"
-        class="min-h-0 flex-1"
-      />
+      <div class="relative flex min-h-0 flex-1 overflow-hidden">
+        <SnippetSidebar side="left" />
+        <SessionView
+          :key="workspace.activeSession.id"
+          :session="workspace.activeSession"
+          class="min-w-0 flex-1"
+        />
+        <SnippetSidebar side="right" />
+      </div>
     </div>
     <FileDropOverlay @drop="file => doc.openDropped(file)" />
   </UApp>

@@ -7,12 +7,13 @@ Built with Nuxt 4, Nuxt UI 4, Pinia and Tauri 2.
 ## Features
 
 - **Prompt blocks** – system, user and assistant messages in a rich Markdown editor. Drag to reorder, change a block's role, copy or remove it.
-- **Snippets** – a tray of reusable text. Drag a snippet into any prompt or click to copy it. Snippets are never sent to the model.
+- **Snippets** – trays of reusable text. Drag a snippet into any prompt and it lands as a word of its own, with a space after it so the next one can follow. Group snippets under named section headings, and switch on Arrange to reorder snippets and headings. Snippets are never sent to the model.
+- **Snippet sidebars** – two more trays at the left and right window edges, shared by every session and saved with the workspace. They slide in when the pointer reaches the edge and can be pinned open.
 - **Sessions** – one tab per conversation. Double-click or press F2 to rename, right-click to duplicate, middle-click to close. Hovering over a tab while dragging text switches to it.
 - **Streaming replies** – press Send (Ctrl/⌘ + Enter) to stream a reply into the trailing empty assistant block, or a new one. Stop at any time and keep the partial text. Reasoning ("thinking") output is shown separately and never saved. Tokens per second are shown when it finishes.
 - **Files** – open, save, save as JSON, or save encrypted. Drop a file anywhere on the window to open it. Files from earlier versions of the app (plain or encrypted) still open.
 - **Autosave** – optional, debounced, and only for files that have a location on disk.
-- **Safety nets** – confirmation before discarding unsaved changes, closing a session with content, or quitting with unsaved work.
+- **Safety nets** – confirmation before discarding unsaved changes, closing a session with content, or quitting with unsaved work. Text copied from the app is cleared off the clipboard when the app quits, unless something else has been copied since.
 - Light and dark themes, keyboard shortcuts, works offline.
 
 ### Keyboard shortcuts
@@ -57,24 +58,25 @@ The LM Studio address defaults to `ws://127.0.0.1:1234` and can be changed in Se
 ```
 app/
 ├── lib/          Pure domain logic, no Vue or I/O (fully unit-tested)
-│   ├── workspace.ts   Sessions, blocks, and what gets sent to the model
-│   ├── schema.ts      File format validation (zod) and migration from v1 files
+│   ├── workspace.ts   Sessions, blocks, snippets, and what gets sent to the model
+│   ├── schema.ts      File format validation (zod) and migration from v1 and v2 files
 │   ├── document.ts    Bytes ⇄ workspace, detecting JSON vs encrypted files
 │   ├── crypto.ts      PBKDF2 + AES-GCM envelope
 │   └── batch.ts       Coalesces streamed tokens into periodic UI updates
 ├── services/     Side effects behind interfaces
 │   ├── files.ts       Tauri dialogs + fs plugin, or browser file APIs
 │   ├── llm.ts         LM Studio SDK (lazy-loaded)
+│   ├── clipboard.ts   Clipboard plugin: secret copies, clearing copied text on quit
 │   └── container.ts   Service registry, so stores can be tested with fakes
 ├── stores/       Pinia stores
-│   ├── workspace.ts   Sessions and every edit to them
+│   ├── workspace.ts   Sessions, sidebars and every edit to them
 │   ├── document.ts    Open/save/encryption, dirty tracking, autosave
 │   ├── generation.ts  Model list, streaming, cancellation
 │   └── settings.ts    Per-device preferences (localStorage)
 ├── plugins/services.ts  Wires real services, modals and toasts into the registry
-├── composables/  Shortcuts, file drop target, window title and close guard
+├── composables/  Shortcuts, file drop target, window title, close guard, clipboard clean-up
 └── components/   UI (Nuxt UI)
-src-tauri/        Tauri shell: dialog + fs plugins only, no custom commands
+src-tauri/        Tauri shell: dialog, fs and clipboard plugins only, no custom commands
 test/unit/        Node tests for lib, services and stores
 test/nuxt/        Component tests rendered in a real Nuxt app
 ```
@@ -86,7 +88,7 @@ Data flows one way: components read store state and call store actions; stores u
 Workspaces are saved as JSON:
 
 ```json
-{ "format": "ai-editor", "version": 2, "sessions": [{ "id": "…", "title": "…", "model": "…", "blocks": [] }] }
+{ "format": "ai-editor", "version": 3, "sessions": [{ "id": "…", "title": "…", "model": "…", "blocks": [] }], "sidebars": { "left": [], "right": [] } }
 ```
 
 Encrypted files (`.aienc`) start with an `AIEDITOR` header recording the format version and PBKDF2 iteration count, followed by a random salt, IV and the AES-256-GCM ciphertext. The header is authenticated, so tampering is detected.
@@ -94,6 +96,9 @@ Encrypted files (`.aienc`) start with an `AIEDITOR` header recording the format 
 - Keys are derived with PBKDF2-SHA256 at 600,000 iterations (OWASP 2023). The derived key is kept non-extractable in memory and reused for autosaves; the password itself is not stored.
 - Files from the original app (100,000 iterations, no header) still open and are upgraded to the new format on the next save.
 - The desktop app can only read or write files the user picked in a dialog: there are no custom file commands, and the fs plugin's scope is limited to dialog selections.
+- Sidebar snippets live in the workspace file, so they are encrypted along with it. Only which sidebars are pinned is kept in local storage.
+- Text copied from an encrypted workspace (Ctrl+C/X, the context menu or a copy button) is written as plain text marked sensitive, so Windows keeps it out of clipboard history (Win+V) and cloud sync, and clipboard managers on macOS and Linux are asked to skip it. Copies from plain workspaces behave as usual.
+- On quit, the app clears the clipboard if it still holds text copied from the app.
 - A strict Content Security Policy limits network access to the app itself and local LM Studio servers. Icons are bundled, so nothing is fetched from the internet at runtime.
 
 ## License

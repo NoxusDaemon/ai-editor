@@ -1,7 +1,8 @@
 /**
- * Service registry. Stores reach side effects (files, LLM, dialogs, toasts)
+ * Service registry. Stores reach side effects (files, LLM, dialogs, toasts, clipboard)
  * through these interfaces, so tests can swap in fakes with `provideServices`.
  */
+import type { Clipboard } from './clipboard'
 import type { FileSystem } from './files'
 import type { LlmProvider } from './llm'
 
@@ -38,6 +39,7 @@ export interface Services {
   files: FileSystem
   llm: LlmProvider
   dialogs: Dialogs
+  clipboard: Clipboard
 }
 
 let services: Services | undefined

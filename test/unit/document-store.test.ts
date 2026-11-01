@@ -3,13 +3,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { nextTick } from 'vue'
 import { createCipher, cryptoSettings, isEncryptedEnvelope } from '~/lib/crypto'
 import { decryptDocument, encodeEncryptedDocument, encodeJsonDocument, inspectDocument } from '~/lib/document'
-import { createDefaultSession, type Session } from '~/lib/workspace'
+import { createDefaultSession, createSection, createSidebars, createSnippet, type Workspace } from '~/lib/workspace'
 import { AUTOSAVE_DELAY_MS, useDocumentStore } from '~/stores/document'
 import { useSettingsStore } from '~/stores/settings'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { createFakeServices } from './fakes'
 
-const fileSessions = (): Session[] => [createDefaultSession('From file')]
+const fileWorkspace = (): Workspace => ({ sessions: [createDefaultSession('From file')], sidebars: createSidebars() })
 
 function setup() {
   const services = createFakeServices()
@@ -19,10 +19,10 @@ function setup() {
   return { ...services, doc, workspace, settings }
 }
 
-/** Sessions stored on the fake disk at `path`, whatever the format. */
+/** The workspace stored in `bytes`, whatever the format. */
 async function readDisk(bytes: Uint8Array | undefined, password = 'pw') {
   const inspected = inspectDocument(bytes!)
-  return inspected.kind === 'json' ? inspected.sessions : (await decryptDocument(bytes!, password)).sessions
+  return inspected.kind === 'json' ? inspected.workspace : (await decryptDocument(bytes!, password)).workspace
 }
 
 describe('document store', () => {
@@ -40,7 +40,7 @@ describe('document store', () => {
 
   it('opens a JSON workspace and tracks unsaved changes', async () => {
     const { files, doc, workspace } = setup()
-    files.disk.set('a.json', encodeJsonDocument(fileSessions()))
+    files.disk.set('a.json', encodeJsonDocument(fileWorkspace()))
     files.nextOpen = 'a.json'
 
     expect(await doc.open()).toBe(true)
@@ -52,12 +52,12 @@ describe('document store', () => {
 
     expect(await doc.save()).toBe(true)
     expect(doc.dirty).toBe(false)
-    expect((await readDisk(files.disk.get('a.json')))[0]!.title).toBe('Edited')
+    expect((await readDisk(files.disk.get('a.json'))).sessions[0]!.title).toBe('Edited')
   })
 
   it('unlocks encrypted files, retrying wrong passwords, and keeps them encrypted on save', async () => {
     const { files, doc, workspace, dialogs, answerPasswords } = setup()
-    files.disk.set('s.aienc', await encodeEncryptedDocument(fileSessions(), await createCipher('pw')))
+    files.disk.set('s.aienc', await encodeEncryptedDocument(fileWorkspace(), await createCipher('pw')))
     files.nextOpen = 's.aienc'
     answerPasswords('wrong', 'pw')
 
@@ -70,12 +70,12 @@ describe('document store', () => {
 
     const saved = files.disk.get('s.aienc')!
     expect(isEncryptedEnvelope(saved)).toBe(true)
-    expect((await readDisk(saved, 'pw'))[0]!.title).toBe('Still secret')
+    expect((await readDisk(saved, 'pw')).sessions[0]!.title).toBe('Still secret')
   })
 
   it('leaves the workspace alone when unlocking is cancelled', async () => {
     const { files, doc, workspace } = setup()
-    files.disk.set('s.aienc', await encodeEncryptedDocument(fileSessions(), await createCipher('pw')))
+    files.disk.set('s.aienc', await encodeEncryptedDocument(fileWorkspace(), await createCipher('pw')))
     files.nextOpen = 's.aienc'
     const before = workspace.sessions
 
@@ -86,7 +86,7 @@ describe('document store', () => {
 
   it('asks before discarding unsaved changes', async () => {
     const { files, doc, workspace, dialogs } = setup()
-    files.disk.set('a.json', encodeJsonDocument(fileSessions()))
+    files.disk.set('a.json', encodeJsonDocument(fileWorkspace()))
     files.nextOpen = 'a.json'
     workspace.addSession()
     dialogs.confirm.mockResolvedValueOnce(false)
@@ -124,12 +124,31 @@ describe('document store', () => {
 
     expect(await doc.saveAs('encrypted')).toBe(true)
     expect(doc).toMatchObject({ fileName: 'vault.aienc', encrypted: true, dirty: false })
-    await expect(readDisk(files.disk.get('vault.aienc'), 's3cret')).resolves.toHaveLength(1)
+    expect((await readDisk(files.disk.get('vault.aienc'), 's3cret')).sessions).toHaveLength(1)
+  })
+
+  it('keeps sidebar snippets in the file, encrypted along with it', async () => {
+    const { files, doc, workspace, answerPasswords } = setup()
+    workspace.setSidebar('left', [createSection('Plot'), createSnippet('twist')])
+    expect(doc.dirty).toBe(true)
+
+    files.nextSave = 'vault.aienc'
+    answerPasswords('pw')
+    expect(await doc.saveAs('encrypted')).toBe(true)
+    expect((await readDisk(files.disk.get('vault.aienc'))).sidebars.left)
+      .toMatchObject([{ kind: 'section', title: 'Plot' }, { kind: 'snippet', text: 'twist' }])
+
+    await doc.newWorkspace()
+    expect(workspace.sidebars.left).toEqual([])
+
+    files.nextOpen = 'vault.aienc'
+    expect(await doc.open()).toBe(true)
+    expect(workspace.sidebars.left.map(item => item.kind)).toEqual(['section', 'snippet'])
   })
 
   it('treats dropped files as having no location to save to', async () => {
     const { files, doc } = setup()
-    const dropped = new File([encodeJsonDocument(fileSessions())], 'dropped.json')
+    const dropped = new File([encodeJsonDocument(fileWorkspace())], 'dropped.json')
 
     expect(await doc.openDropped(dropped)).toBe(true)
     expect(doc).toMatchObject({ fileName: 'dropped.json', canAutosave: false })
@@ -142,7 +161,7 @@ describe('document store', () => {
   it('autosaves after edits settle', async () => {
     vi.useFakeTimers()
     const { files, doc, workspace, settings } = setup()
-    files.disk.set('a.json', encodeJsonDocument(fileSessions()))
+    files.disk.set('a.json', encodeJsonDocument(fileWorkspace()))
     files.nextOpen = 'a.json'
     await doc.open()
     settings.autosave = true
@@ -164,7 +183,7 @@ describe('document store', () => {
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2)
     expect(files.writes).toEqual([])
 
-    files.disk.set('a.json', encodeJsonDocument(fileSessions()))
+    files.disk.set('a.json', encodeJsonDocument(fileWorkspace()))
     files.nextOpen = 'a.json'
     await doc.open()
     settings.autosave = false
@@ -176,7 +195,7 @@ describe('document store', () => {
   it('surfaces a failing autosave once rather than on every attempt', async () => {
     vi.useFakeTimers()
     const { files, doc, workspace, settings, dialogs } = setup()
-    files.disk.set('a.json', encodeJsonDocument(fileSessions()))
+    files.disk.set('a.json', encodeJsonDocument(fileWorkspace()))
     files.nextOpen = 'a.json'
     await doc.open()
     settings.autosave = true

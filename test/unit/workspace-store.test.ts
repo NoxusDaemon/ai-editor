@@ -1,6 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createDefaultSession } from '~/lib/workspace'
+import { createDefaultSession, createSection, createSidebars, createSnippet } from '~/lib/workspace'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 describe('workspace store', () => {
@@ -71,14 +71,15 @@ describe('workspace store', () => {
 
     workspace.updateMessage(session.id, system!.id, { content: 'Be terse' })
     workspace.setRole(session.id, user!.id, 'assistant')
-    workspace.setSnippets(session.id, snippets!.id, ['a', 'b'])
+    const items = [createSnippet('a'), createSection('B'), createSnippet('b')]
+    workspace.setSnippets(session.id, snippets!.id, items)
     workspace.moveBlock(session.id, 0, 3)
     workspace.removeBlock(session.id, user!.id)
 
     expect(session.blocks).toMatchObject([
       { kind: 'message', role: 'system', content: 'Be terse' },
       { kind: 'message', role: 'assistant' },
-      { kind: 'snippets', items: ['a', 'b'] }
+      { kind: 'snippets', items }
     ])
   })
 
@@ -88,7 +89,7 @@ describe('workspace store', () => {
     const before = session.blocks.map(b => b.id)
 
     workspace.moveBlock(session.id, 0, 99)
-    workspace.setSnippets(session.id, session.blocks[1]!.id, ['not a snippets block'])
+    workspace.setSnippets(session.id, session.blocks[1]!.id, [createSnippet('not a snippets block')])
 
     expect(session.blocks.map(b => b.id)).toEqual(before)
     expect(session.blocks[1]).not.toHaveProperty('items')
@@ -105,9 +106,21 @@ describe('workspace store', () => {
   it('replaces everything when a file is loaded', () => {
     const workspace = useWorkspaceStore()
     const loaded = [createDefaultSession('Loaded A'), createDefaultSession('Loaded B')]
-    workspace.replaceAll(loaded)
+    const sidebars = { ...createSidebars(), right: [createSnippet('from file')] }
+    workspace.restore({ sessions: loaded, sidebars })
 
     expect(workspace.sessions.map(s => s.title)).toEqual(['Loaded A', 'Loaded B'])
     expect(workspace.activeId).toBe(loaded[0]!.id)
+    expect(workspace.sidebars).toEqual(sidebars)
+  })
+
+  it('keeps the sidebars when the last session is closed', () => {
+    const workspace = useWorkspaceStore()
+    const items = [createSection('Generic'), createSnippet('Be concise')]
+    workspace.setSidebar('left', items)
+
+    workspace.closeSession(workspace.activeId)
+
+    expect(workspace.sidebars).toEqual({ left: items, right: [] })
   })
 })
