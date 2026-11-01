@@ -6,7 +6,7 @@
     :placeholder="placeholder"
     :image="false"
     :mention="false"
-    :extensions="[ReserveSendShortcut, SnippetDrop]"
+    :extensions="[ReserveAppShortcuts, SnippetDrop]"
     class="w-full"
     :ui="{ base: 'min-h-12 px-4 py-3 text-sm/6' }"
   />
@@ -17,10 +17,14 @@ import { Extension } from '@tiptap/core'
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import { padSnippet, SNIPPET_MIME } from '~/utils/snippets'
 
-/** Mod-Enter sends the prompt (see useAppShortcuts) instead of inserting a hard break. */
-const ReserveSendShortcut = Extension.create({
-  name: 'reserveSendShortcut',
-  addKeyboardShortcuts: () => ({ 'Mod-Enter': () => true })
+/**
+ * Keys that belong to the app (see useAppShortcuts), so the editor doesn't act on them too:
+ * Mod-Enter sends instead of inserting a hard break, and Mod-Shift-S saves as JSON instead
+ * of toggling strikethrough (`~~text~~` still works).
+ */
+export const ReserveAppShortcuts = Extension.create({
+  name: 'reserveAppShortcuts',
+  addKeyboardShortcuts: () => ({ 'Mod-Enter': () => true, 'Mod-Shift-s': () => true })
 })
 
 /** Drops a snippet as a word: spaced from the text around it, with the caret after it. */

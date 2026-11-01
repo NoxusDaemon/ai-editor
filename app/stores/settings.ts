@@ -16,5 +16,10 @@ export const useSettingsStore = defineStore('settings', () => {
     { mergeDefaults: true }
   )
 
-  return { autosave, lmStudioUrl, defaultModel, pinnedSidebars }
+  /** Paths of recently opened or saved files, newest first (desktop app only). */
+  const recentFiles = useLocalStorage<string[]>('ai-editor:recent-files', [])
+  /** Opens the most recent file when the app starts (desktop app only). */
+  const reopenLastFile = useLocalStorage('ai-editor:reopen-last-file', true)
+
+  return { autosave, lmStudioUrl, defaultModel, pinnedSidebars, recentFiles, reopenLastFile }
 })

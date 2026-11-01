@@ -6,7 +6,7 @@
   >
     <template #footer>
       <UButton
-        label="Cancel"
+        :label="cancelLabel"
         color="neutral"
         variant="ghost"
         @click="emit('close', false)"
@@ -27,10 +27,12 @@ withDefaults(defineProps<{
   title: string
   description?: string
   confirmLabel?: string
+  cancelLabel?: string
   danger?: boolean
 }>(), {
   description: undefined,
   confirmLabel: 'Confirm',
+  cancelLabel: 'Cancel',
   danger: false
 })
 

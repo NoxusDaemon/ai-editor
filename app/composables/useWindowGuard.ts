@@ -38,6 +38,8 @@ export function useWindowGuard() {
         event.preventDefault()
         return
       }
+      // Quitting without saving is deliberate, so don't offer the changes back next time.
+      if (doc.dirty) await doc.discardRecovery()
       // The window closes once this handler returns.
       await clearCopiedText(clipboard)
     })

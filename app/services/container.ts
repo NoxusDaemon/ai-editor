@@ -1,10 +1,11 @@
 /**
- * Service registry. Stores reach side effects (files, LLM, dialogs, toasts, clipboard)
+ * Service registry. Stores reach side effects (files, crash recovery, LLM, dialogs, toasts, clipboard)
  * through these interfaces, so tests can swap in fakes with `provideServices`.
  */
 import type { Clipboard } from './clipboard'
 import type { FileSystem } from './files'
 import type { LlmProvider } from './llm'
+import type { RecoveryStore } from './recovery'
 
 export interface PasswordRequest {
   title: string
@@ -20,6 +21,7 @@ export interface ConfirmRequest {
   title: string
   description?: string
   confirmLabel?: string
+  cancelLabel?: string
   danger?: boolean
 }
 
@@ -37,6 +39,7 @@ export interface Dialogs {
 
 export interface Services {
   files: FileSystem
+  recovery: RecoveryStore
   llm: LlmProvider
   dialogs: Dialogs
   clipboard: Clipboard

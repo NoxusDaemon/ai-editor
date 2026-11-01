@@ -23,13 +23,20 @@
             class="w-full"
           />
         </UFormField>
+        <USwitch
+          v-if="remembersPaths"
+          v-model="settings.reopenLastFile"
+          label="Reopen the last file on startup"
+        />
       </div>
     </template>
   </UPopover>
 </template>
 
 <script setup lang="ts">
+import { useServices } from '~/services/container'
 import { DEFAULT_LMSTUDIO_URL } from '~/services/llm'
 
 const settings = useSettingsStore()
+const remembersPaths = useServices().files.remembersPaths
 </script>

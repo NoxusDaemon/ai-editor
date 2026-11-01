@@ -1,12 +1,13 @@
 /**
  * File access for the two runtimes the app supports:
- * - Tauri desktop: native dialogs + the fs plugin (scoped to picked files).
+ * - Tauri desktop: native dialogs + the fs plugin (scoped to picked files), with
+ *   saves going through the app's atomic `write_file_atomic` command.
  * - Browser (`bun run dev`): File System Access API, falling back to
  *   upload/download where it is unavailable.
  */
-import { isTauri } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { readFile, writeFile } from '@tauri-apps/plugin-fs'
+import { readFile } from '@tauri-apps/plugin-fs'
 
 export type DocumentKind = 'json' | 'encrypted'
 
@@ -31,6 +32,10 @@ export interface FileSystem {
   write(ref: FileRef, bytes: Uint8Array): Promise<void>
   /** Whether `write` updates the file in place, which autosave relies on. */
   canWriteInPlace(ref: FileRef): boolean
+  /** Whether files can be reopened by path later, e.g. from the recent files list. */
+  readonly remembersPaths: boolean
+  /** Reads a file picked in an earlier session. Only when `remembersPaths`. */
+  reopen(path: string): Promise<OpenedFile>
 }
 
 export const FILE_EXTENSIONS: Record<DocumentKind, string> = { json: 'json', encrypted: 'aienc' }
@@ -73,10 +78,18 @@ export function createTauriFileSystem(): FileSystem {
 
     async write(ref, bytes) {
       if (!ref.path) throw new Error(`"${ref.name}" has no location on disk. Use "Save as" instead.`)
-      await writeFile(ref.path, bytes)
+      // Written to a temporary file and renamed over the original, so a crash never leaves half a file.
+      await invoke('write_file_atomic', bytes, { headers: { path: encodeURIComponent(ref.path) } })
     },
 
-    canWriteInPlace: ref => !!ref.path
+    canWriteInPlace: ref => !!ref.path,
+
+    // Picked paths stay in the fs scope across restarts (persisted-scope plugin).
+    remembersPaths: true,
+
+    async reopen(path) {
+      return { ref: { name: basename(path), path }, bytes: await readFile(path) }
+    }
   }
 }
 
@@ -151,12 +164,17 @@ export function createBrowserFileSystem(): FileSystem {
 
     async write(ref, bytes) {
       if (!ref.handle) return download(ref.name, bytes)
+      // Writes go to a swap file that replaces the original on close, so they are atomic.
       const writable = await ref.handle.createWritable()
       await writable.write(new Uint8Array(bytes))
       await writable.close()
     },
 
-    canWriteInPlace: ref => !!ref.handle
+    canWriteInPlace: ref => !!ref.handle,
+
+    remembersPaths: false,
+
+    reopen: () => Promise.reject(new Error('Reopening files by path is only possible in the desktop app.'))
   }
 }
 

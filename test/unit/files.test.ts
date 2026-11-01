@@ -5,12 +5,12 @@ const tauri = vi.hoisted(() => ({
   open: vi.fn(),
   save: vi.fn(),
   readFile: vi.fn(),
-  writeFile: vi.fn()
+  invoke: vi.fn()
 }))
 
-vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => true }))
+vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => true, invoke: tauri.invoke }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: tauri.open, save: tauri.save }))
-vi.mock('@tauri-apps/plugin-fs', () => ({ readFile: tauri.readFile, writeFile: tauri.writeFile }))
+vi.mock('@tauri-apps/plugin-fs', () => ({ readFile: tauri.readFile }))
 
 describe('file helpers', () => {
   it('extracts file names from Windows and POSIX paths', () => {
@@ -62,14 +62,28 @@ describe('Tauri file system', () => {
     })
   })
 
-  it('writes in place only when the file has a path', async () => {
+  it('writes in place, atomically, only when the file has a path', async () => {
     const files = createTauriFileSystem()
     const bytes = new Uint8Array([7])
 
-    await files.write({ name: 'a.json', path: '/a.json' }, bytes)
-    expect(tauri.writeFile).toHaveBeenCalledWith('/a.json', bytes)
+    await files.write({ name: 'a b.json', path: 'C:\\my files\\a b.json' }, bytes)
+    expect(tauri.invoke).toHaveBeenCalledWith('write_file_atomic', bytes, {
+      headers: { path: 'C%3A%5Cmy%20files%5Ca%20b.json' }
+    })
 
     expect(files.canWriteInPlace({ name: 'dropped.json' })).toBe(false)
     await expect(files.write({ name: 'dropped.json' }, bytes)).rejects.toThrow('Save as')
+  })
+
+  it('reopens remembered paths without a dialog', async () => {
+    tauri.readFile.mockResolvedValue(new Uint8Array([3]))
+    const files = createTauriFileSystem()
+
+    expect(files.remembersPaths).toBe(true)
+    expect(await files.reopen('/data/old.aienc')).toEqual({
+      ref: { name: 'old.aienc', path: '/data/old.aienc' },
+      bytes: new Uint8Array([3])
+    })
+    expect(tauri.open).not.toHaveBeenCalled()
   })
 })

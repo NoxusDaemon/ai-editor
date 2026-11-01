@@ -209,4 +209,133 @@ describe('document store', () => {
     expect(doc).toMatchObject({ status: 'error', lastError: 'Disk full', dirty: true })
     expect(dialogs.notify).toHaveBeenCalledOnce()
   })
+
+  describe('recent files', () => {
+    it('remembers opened and saved files, newest first, without duplicates', async () => {
+      const { files, doc, settings } = setup()
+      files.disk.set('a.json', encodeJsonDocument(fileWorkspace()))
+      files.nextOpen = 'a.json'
+      await doc.open()
+      files.nextSave = 'b.json'
+      await doc.saveAs('json')
+      files.nextOpen = 'a.json'
+      await doc.open()
+
+      expect(settings.recentFiles).toEqual(['a.json', 'b.json'])
+    })
+
+    it('reopens a recent file, and forgets it when it is gone', async () => {
+      const { files, doc, workspace, settings, dialogs } = setup()
+      files.disk.set('a.json', encodeJsonDocument(fileWorkspace()))
+      settings.recentFiles = ['a.json', 'gone.json']
+
+      expect(await doc.openRecent('a.json')).toBe(true)
+      expect(workspace.sessions[0]!.title).toBe('From file')
+      expect(doc.fileName).toBe('a.json')
+
+      expect(await doc.openRecent('gone.json')).toBe(false)
+      expect(settings.recentFiles).toEqual(['a.json'])
+      expect(dialogs.notify).toHaveBeenCalledWith(expect.objectContaining({ title: 'Could not open gone.json' }))
+    })
+
+    it('reopens the last file on startup unless switched off', async () => {
+      const { files, doc, settings } = setup()
+      files.disk.set('a.json', encodeJsonDocument(fileWorkspace()))
+      settings.recentFiles = ['a.json']
+      settings.reopenLastFile = false
+      await doc.startup()
+      expect(doc.fileName).toBe('Untitled')
+
+      settings.reopenLastFile = true
+      await doc.startup()
+      expect(doc.fileName).toBe('a.json')
+    })
+  })
+
+  describe('crash recovery', () => {
+    it('keeps a copy of unsaved changes and drops it once they are saved', async () => {
+      vi.useFakeTimers()
+      const { files, recovery, doc, workspace } = setup()
+      files.disk.set('a.json', encodeJsonDocument(fileWorkspace()))
+      files.nextOpen = 'a.json'
+      await doc.startup()
+      await doc.open()
+
+      workspace.renameSession(workspace.activeId, 'Unsaved')
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS)
+      expect(recovery.saved).toMatchObject({ name: 'a.json', path: 'a.json' })
+      expect((await readDisk(recovery.saved!.bytes)).sessions[0]!.title).toBe('Unsaved')
+      expect(files.writes).toEqual([])
+
+      await doc.save()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(recovery.saved).toBeNull()
+    })
+
+    it('encrypts the copy of an encrypted workspace', async () => {
+      vi.useFakeTimers()
+      const { files, recovery, doc, workspace, answerPasswords } = setup()
+      files.disk.set('s.aienc', await encodeEncryptedDocument(fileWorkspace(), await createCipher('pw')))
+      files.nextOpen = 's.aienc'
+      answerPasswords('pw')
+      await doc.startup()
+      await doc.open()
+
+      workspace.renameSession(workspace.activeId, 'Secret')
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS)
+      // Encryption finishes outside the fake clock.
+      await vi.waitFor(() => expect(recovery.saved).not.toBeNull())
+      expect(isEncryptedEnvelope(recovery.saved!.bytes)).toBe(true)
+      expect((await readDisk(recovery.saved!.bytes)).sessions[0]!.title).toBe('Secret')
+    })
+
+    it('does not overwrite the copy before offering to restore it', async () => {
+      vi.useFakeTimers()
+      const { recovery, workspace } = setup()
+      const saved = { bytes: encodeJsonDocument(fileWorkspace()), savedAt: 0 }
+      recovery.saved = saved
+
+      workspace.addSession()
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2)
+      expect(recovery.saved).toBe(saved)
+    })
+
+    it('restores an unsaved workspace on startup as unsaved', async () => {
+      const { recovery, doc, workspace, dialogs } = setup()
+      recovery.saved = { bytes: encodeJsonDocument(fileWorkspace()), savedAt: 0 }
+
+      await doc.startup()
+
+      expect(dialogs.confirm).toHaveBeenCalledWith(expect.objectContaining({ confirmLabel: 'Restore', cancelLabel: 'Discard' }))
+      expect(workspace.sessions[0]!.title).toBe('From file')
+      expect(doc).toMatchObject({ fileName: 'Untitled', dirty: true })
+      expect(recovery.saved).not.toBeNull()
+    })
+
+    it('restores changes to an encrypted file back into that file', async () => {
+      const { files, recovery, doc, workspace, settings, answerPasswords } = setup()
+      const cipher = await createCipher('pw')
+      recovery.saved = { bytes: await encodeEncryptedDocument(fileWorkspace(), cipher), name: 's.aienc', path: 's.aienc', savedAt: 0 }
+      settings.recentFiles = ['other.json']
+      answerPasswords('pw')
+
+      await doc.startup()
+      expect(doc).toMatchObject({ fileName: 's.aienc', encrypted: true, dirty: true })
+
+      await doc.save()
+      expect(files.writes).toEqual(['s.aienc'])
+      expect((await readDisk(files.disk.get('s.aienc'))).sessions[0]!.title).toBe(workspace.sessions[0]!.title)
+    })
+
+    it('discards the copy when restoring is declined', async () => {
+      const { recovery, doc, dialogs } = setup()
+      recovery.saved = { bytes: encodeJsonDocument(fileWorkspace()), savedAt: 0 }
+      dialogs.confirm.mockResolvedValue(false)
+
+      await doc.startup()
+
+      expect(doc.fileName).toBe('Untitled')
+      expect(recovery.saved).toBeNull()
+    })
+  })
 })

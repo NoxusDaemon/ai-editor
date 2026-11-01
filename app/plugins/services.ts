@@ -4,6 +4,7 @@ import { createClipboard } from '~/services/clipboard'
 import { provideServices } from '~/services/container'
 import { createFileSystem } from '~/services/files'
 import { createLmStudioProvider } from '~/services/llm'
+import { createIndexedDbRecovery } from '~/services/recovery'
 
 const NOTICE_ICONS = {
   success: 'i-lucide-circle-check',
@@ -22,6 +23,7 @@ export default defineNuxtPlugin(() => {
 
   provideServices({
     files: createFileSystem(),
+    recovery: createIndexedDbRecovery(),
     llm: createLmStudioProvider(() => settings.lmStudioUrl),
     dialogs: {
       askPassword: async request => (await passwordModal.open(request).result) ?? null,

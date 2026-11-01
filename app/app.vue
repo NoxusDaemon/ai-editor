@@ -26,4 +26,6 @@ const doc = useDocumentStore()
 
 useAppShortcuts()
 useWindowGuard()
+
+onMounted(() => void doc.startup())
 </script>

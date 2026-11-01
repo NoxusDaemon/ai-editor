@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window. File access is limited to files the user picks in an open/save dialog. Clipboard access is for text copied from the app: copies from encrypted workspaces are written as secrets, and on quit the clipboard is cleared if it still holds such text.",
+  "description": "Main window. File access is limited to files the user picks in an open/save dialog (remembered across restarts for recent files); saves replace the file atomically through the app's write_file_atomic command, which checks the same scope. Clipboard access is for text copied from the app: copies from encrypted workspaces are written as secrets, and on quit the clipboard is cleared if it still holds such text.",
   "windows": [
     "main"
   ],
@@ -12,7 +12,7 @@
     "dialog:allow-open",
     "dialog:allow-save",
     "fs:allow-read-file",
-    "fs:allow-write-file",
+    "allow-write-file-atomic",
     "clipboard-manager:allow-read-text",
     "clipboard-manager:allow-write-secret",
     "clipboard-manager:allow-clear"

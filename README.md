@@ -13,6 +13,9 @@ Built with Nuxt 4, Nuxt UI 4, Pinia and Tauri 2.
 - **Streaming replies** – press Send (Ctrl/⌘ + Enter) to stream a reply into the trailing empty assistant block, or a new one. Stop at any time and keep the partial text. Reasoning ("thinking") output is shown separately and never saved. Tokens per second are shown when it finishes.
 - **Files** – open, save, save as JSON, or save encrypted. Drop a file anywhere on the window to open it. Files from earlier versions of the app (plain or encrypted) still open.
 - **Autosave** – optional, debounced, and only for files that have a location on disk.
+- **Crash-safe saves** – the desktop app writes to a temporary file and renames it over the original, so a crash or power cut never leaves a half-written workspace.
+- **Crash recovery** – unsaved changes (including in "Untitled" workspaces) are copied to the app's local storage every few seconds, encrypted if the workspace is. After a crash the app offers to restore them.
+- **Recent files** – File → Open recent, and the last file reopens on startup (desktop app; can be turned off in Settings).
 - **Safety nets** – confirmation before discarding unsaved changes, closing a session with content, or quitting with unsaved work. Text copied from the app is cleared off the clipboard when the app quits, unless something else has been copied since.
 - Light and dark themes, keyboard shortcuts, works offline.
 
@@ -64,7 +67,8 @@ app/
 │   ├── crypto.ts      PBKDF2 + AES-GCM envelope
 │   └── batch.ts       Coalesces streamed tokens into periodic UI updates
 ├── services/     Side effects behind interfaces
-│   ├── files.ts       Tauri dialogs + fs plugin, or browser file APIs
+│   ├── files.ts       Tauri dialogs + fs plugin + atomic writes, or browser file APIs
+│   ├── recovery.ts    Crash-recovery copy of unsaved changes (IndexedDB)
 │   ├── llm.ts         LM Studio SDK (lazy-loaded)
 │   ├── clipboard.ts   Clipboard plugin: secret copies, clearing copied text on quit
 │   └── container.ts   Service registry, so stores can be tested with fakes
@@ -76,7 +80,7 @@ app/
 ├── plugins/services.ts  Wires real services, modals and toasts into the registry
 ├── composables/  Shortcuts, file drop target, window title, close guard, clipboard clean-up
 └── components/   UI (Nuxt UI)
-src-tauri/        Tauri shell: dialog, fs and clipboard plugins only, no custom commands
+src-tauri/        Tauri shell: dialog, fs, persisted-scope and clipboard plugins, plus one command (write_file_atomic)
 test/unit/        Node tests for lib, services and stores
 test/nuxt/        Component tests rendered in a real Nuxt app
 ```
@@ -95,7 +99,7 @@ Encrypted files (`.aienc`) start with an `AIEDITOR` header recording the format 
 
 - Keys are derived with PBKDF2-SHA256 at 600,000 iterations (OWASP 2023). The derived key is kept non-extractable in memory and reused for autosaves; the password itself is not stored.
 - Files from the original app (100,000 iterations, no header) still open and are upgraded to the new format on the next save.
-- The desktop app can only read or write files the user picked in a dialog: there are no custom file commands, and the fs plugin's scope is limited to dialog selections.
+- The desktop app can only read or write files the user picked in a dialog. The fs plugin's scope is limited to dialog selections, which are remembered across restarts so recent files can be reopened. The one custom command, `write_file_atomic`, checks the same scope before writing.
 - Sidebar snippets live in the workspace file, so they are encrypted along with it. Only which sidebars are pinned is kept in local storage.
 - Text copied from an encrypted workspace (Ctrl+C/X, the context menu or a copy button) is written as plain text marked sensitive, so Windows keeps it out of clipboard history (Win+V) and cloud sync, and clipboard managers on macOS and Linux are asked to skip it. Copies from plain workspaces behave as usual.
 - On quit, the app clears the clipboard if it still holds text copied from the app.

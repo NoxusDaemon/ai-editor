@@ -3,6 +3,7 @@ import type { Clipboard } from '~/services/clipboard'
 import { provideServices, type Dialogs, type PasswordRequest } from '~/services/container'
 import type { FileRef, FileSystem } from '~/services/files'
 import type { GenerateRequest, GenerateStats, LlmProvider, ModelOption } from '~/services/llm'
+import type { RecoverySnapshot, RecoveryStore } from '~/services/recovery'
 
 /** In-memory file system: paths map to bytes; tests choose what the dialogs return. */
 export class FakeFiles implements FileSystem {
@@ -31,10 +32,36 @@ export class FakeFiles implements FileSystem {
   canWriteInPlace(ref: FileRef) {
     return !!ref.path
   }
+
+  remembersPaths = true
+
+  async reopen(path: string) {
+    const bytes = this.disk.get(path)
+    if (!bytes) throw new Error('File not found')
+    return { ref: { name: path, path }, bytes }
+  }
+}
+
+/** Recovery copy held in memory, like the IndexedDB one. */
+export class FakeRecovery implements RecoveryStore {
+  saved: RecoverySnapshot | null = null
+
+  async read() {
+    return this.saved
+  }
+
+  async write(snapshot: RecoverySnapshot) {
+    this.saved = snapshot
+  }
+
+  async clear() {
+    this.saved = null
+  }
 }
 
 export function createFakeServices() {
   const files = new FakeFiles()
+  const recovery = new FakeRecovery()
   const dialogs = {
     askPassword: vi.fn<Dialogs['askPassword']>(async () => null),
     confirm: vi.fn<Dialogs['confirm']>(async () => true),
@@ -51,7 +78,7 @@ export function createFakeServices() {
     clear: vi.fn<Clipboard['clear']>(async () => {})
   }
 
-  provideServices({ files, dialogs, llm, clipboard })
+  provideServices({ files, recovery, dialogs, llm, clipboard })
 
   /** Answers password prompts like the real dialog: tries each password until `verify` accepts one. */
   function answerPasswords(...passwords: string[]) {
@@ -63,5 +90,5 @@ export function createFakeServices() {
     })
   }
 
-  return { files, dialogs, llm, clipboard, answerPasswords }
+  return { files, recovery, dialogs, llm, clipboard, answerPasswords }
 }
