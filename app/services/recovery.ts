@@ -1,7 +1,7 @@
 /**
  * Crash recovery: a copy of the workspace with unsaved changes, kept in the
- * webview's IndexedDB (both runtimes) until it is saved or discarded. Encrypted
- * workspaces are stored encrypted, in the same format as their file.
+ * webview's IndexedDB until it is saved or discarded. Encrypted workspaces are
+ * stored encrypted, in the same format as their file.
  */
 
 export interface RecoverySnapshot {

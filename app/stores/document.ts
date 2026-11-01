@@ -45,7 +45,7 @@ export const useDocumentStore = defineStore('document', () => {
   const savedSnapshot = ref(snapshot.value)
   const dirty = computed(() => snapshot.value !== savedSnapshot.value)
   const fileName = computed(() => file.value?.name ?? 'Untitled')
-  const canAutosave = computed(() => !!file.value && useServices().files.canWriteInPlace(file.value))
+  const canAutosave = computed(() => !!file.value?.path)
 
   function report(title: string, error: unknown) {
     useServices().dialogs.notify({ title, description: errorMessage(error), color: 'error' })
@@ -78,10 +78,10 @@ export const useDocumentStore = defineStore('document', () => {
     return true
   }
 
-  /** Adds a file to the top of the recent files list (desktop app only). */
+  /** Adds a file to the top of the recent files list. */
   function remember(target: FileRef | null) {
     const path = target?.path
-    if (!path || !useServices().files.remembersPaths) return
+    if (!path) return
     settings.recentFiles = [path, ...settings.recentFiles.filter(p => p !== path)].slice(0, MAX_RECENT_FILES)
   }
 
@@ -222,7 +222,7 @@ export const useDocumentStore = defineStore('document', () => {
   }
 
   async function save(): Promise<boolean> {
-    if (!file.value || !useServices().files.canWriteInPlace(file.value)) {
+    if (!file.value?.path) {
       return saveAs(encrypted.value ? 'encrypted' : 'json')
     }
     return writeTo(file.value, cipher)
@@ -263,7 +263,7 @@ export const useDocumentStore = defineStore('document', () => {
 
   /** Offers to restore changes that were never saved. Returns whether they were restored. */
   async function restore(saved: RecoverySnapshot): Promise<boolean> {
-    const { files, dialogs } = useServices()
+    const { dialogs } = useServices()
     const name = saved.name ?? 'Untitled'
     const restoring = await dialogs.confirm({
       title: 'Restore unsaved changes?',
@@ -271,8 +271,8 @@ export const useDocumentStore = defineStore('document', () => {
       confirmLabel: 'Restore',
       cancelLabel: 'Discard'
     })
-    // Without the File System Access handle a browser can't write back, so the next save asks where to.
-    const ref = saved.name === undefined ? null : saved.path && files.remembersPaths ? { name: saved.name, path: saved.path } : { name: saved.name }
+    // A dropped file has no path, so the next save asks where to.
+    const ref = saved.name === undefined ? null : saved.path ? { name: saved.name, path: saved.path } : { name: saved.name }
     if (restoring && await load(saved.bytes, ref, name)) {
       // The changes are still unsaved; the file on disk doesn't have them.
       savedSnapshot.value = ''
@@ -284,7 +284,7 @@ export const useDocumentStore = defineStore('document', () => {
 
   /** Runs once when the app starts: restores unsaved changes after a crash, or reopens the last file. */
   async function startup(): Promise<void> {
-    const { files, recovery } = useServices()
+    const { recovery } = useServices()
     try {
       const saved = await recovery.read().catch((error) => {
         console.warn('Crash recovery:', error)
@@ -292,7 +292,7 @@ export const useDocumentStore = defineStore('document', () => {
       })
       if (saved && await restore(saved)) return
       const last = settings.recentFiles[0]
-      if (last && settings.reopenLastFile && files.remembersPaths) await openRecent(last)
+      if (last && settings.reopenLastFile) await openRecent(last)
     } finally {
       recoveryEnabled = true
     }

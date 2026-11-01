@@ -48,7 +48,7 @@ export function normaliseServerUrl(url: string): string {
 }
 
 /**
- * Checks the server answers before handing it to the SDK. In browsers the SDK
+ * Checks the server answers before handing it to the SDK. In the webview the SDK
  * neither awaits its own probe nor handles WebSocket errors safely, so an
  * unreachable server would otherwise surface as uncaught exceptions.
  * `no-cors` keeps this a pure reachability check.

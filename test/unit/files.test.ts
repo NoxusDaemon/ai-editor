@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { basename, createTauriFileSystem, withExtension } from '~/services/files'
+import { basename, createFileSystem, withExtension } from '~/services/files'
 
 const tauri = vi.hoisted(() => ({
   open: vi.fn(),
@@ -8,7 +8,7 @@ const tauri = vi.hoisted(() => ({
   invoke: vi.fn()
 }))
 
-vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => true, invoke: tauri.invoke }))
+vi.mock('@tauri-apps/api/core', () => ({ invoke: tauri.invoke }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: tauri.open, save: tauri.save }))
 vi.mock('@tauri-apps/plugin-fs', () => ({ readFile: tauri.readFile }))
 
@@ -25,7 +25,7 @@ describe('file helpers', () => {
   })
 })
 
-describe('Tauri file system', () => {
+describe('file system', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -34,7 +34,7 @@ describe('Tauri file system', () => {
     tauri.open.mockResolvedValue('C:\\data\\work.json')
     tauri.readFile.mockResolvedValue(new Uint8Array([1, 2]))
 
-    const opened = await createTauriFileSystem().pickAndRead()
+    const opened = await createFileSystem().pickAndRead()
 
     expect(opened).toEqual({ ref: { name: 'work.json', path: 'C:\\data\\work.json' }, bytes: new Uint8Array([1, 2]) })
     expect(tauri.open).toHaveBeenCalledWith(expect.objectContaining({ multiple: false, directory: false }))
@@ -43,7 +43,7 @@ describe('Tauri file system', () => {
   it('returns null when a dialog is cancelled', async () => {
     tauri.open.mockResolvedValue(null)
     tauri.save.mockResolvedValue(null)
-    const files = createTauriFileSystem()
+    const files = createFileSystem()
 
     expect(await files.pickAndRead()).toBeNull()
     expect(await files.pickSaveTarget('json', 'x.json')).toBeNull()
@@ -53,7 +53,7 @@ describe('Tauri file system', () => {
   it('offers the right file type when saving', async () => {
     tauri.save.mockResolvedValue('/tmp/vault.aienc')
 
-    const target = await createTauriFileSystem().pickSaveTarget('encrypted', 'vault.aienc')
+    const target = await createFileSystem().pickSaveTarget('encrypted', 'vault.aienc')
 
     expect(target).toEqual({ name: 'vault.aienc', path: '/tmp/vault.aienc' })
     expect(tauri.save).toHaveBeenCalledWith({
@@ -63,7 +63,7 @@ describe('Tauri file system', () => {
   })
 
   it('writes in place, atomically, only when the file has a path', async () => {
-    const files = createTauriFileSystem()
+    const files = createFileSystem()
     const bytes = new Uint8Array([7])
 
     await files.write({ name: 'a b.json', path: 'C:\\my files\\a b.json' }, bytes)
@@ -71,15 +71,13 @@ describe('Tauri file system', () => {
       headers: { path: 'C%3A%5Cmy%20files%5Ca%20b.json' }
     })
 
-    expect(files.canWriteInPlace({ name: 'dropped.json' })).toBe(false)
     await expect(files.write({ name: 'dropped.json' }, bytes)).rejects.toThrow('Save as')
   })
 
   it('reopens remembered paths without a dialog', async () => {
     tauri.readFile.mockResolvedValue(new Uint8Array([3]))
-    const files = createTauriFileSystem()
+    const files = createFileSystem()
 
-    expect(files.remembersPaths).toBe(true)
     expect(await files.reopen('/data/old.aienc')).toEqual({
       ref: { name: 'old.aienc', path: '/data/old.aienc' },
       bytes: new Uint8Array([3])

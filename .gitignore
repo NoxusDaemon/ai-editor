@@ -28,7 +28,6 @@ logs
 .vs
 *.swp
 .vscode/*
-!.vscode/launch.json
 !.vscode/extensions.json
 .claude/settings.local.json
 

@@ -35,7 +35,7 @@ What was wrong with the previous version (commit `b528da2`) and how the rewrite 
 
 ## Third-party issues worked around
 
-- `@lmstudio/sdk` 2.1 in browsers doesn't await its own server probe, and crashes in `onWsError` because browser WebSocket error events have no `error`. `services/llm.ts` always passes an explicit URL and checks the server answers first. Worth reporting upstream.
+- `@lmstudio/sdk` 2.1 in the webview (its browser build) doesn't await its own server probe, and crashes in `onWsError` because browser WebSocket error events have no `error`. `services/llm.ts` always passes an explicit URL and checks the server answers first. Worth reporting upstream.
 
 ## UX
 
@@ -53,5 +53,5 @@ Now there are toasts, a dirty indicator with the file name in the title bar, gua
 - **TypeScript 7** isn't used: `vue-tsc` needs the TypeScript JS API, which 7.0 doesn't ship. The project stays on 6.0 until Volar supports it.
 - **Tauri 3** is still alpha; the app uses Tauri 2.12.
 - Nuxt reports Node 25 as unsupported; use Node 24 LTS or 26.
-- The main JS chunk is about 1.5 MB (TipTap, Nuxt UI). That's fine for a desktop app loading from disk; the editor could be lazy-loaded if web hosting matters.
+- The main JS chunk is about 1.5 MB (TipTap, Nuxt UI). That's fine for a desktop app loading from disk.
 - Native dialogs and the quit-with-unsaved-changes prompt were not exercised by automated tests.

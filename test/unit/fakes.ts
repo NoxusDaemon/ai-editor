@@ -29,12 +29,6 @@ export class FakeFiles implements FileSystem {
     this.disk.set(ref.path!, bytes)
   }
 
-  canWriteInPlace(ref: FileRef) {
-    return !!ref.path
-  }
-
-  remembersPaths = true
-
   async reopen(path: string) {
     const bytes = this.disk.get(path)
     if (!bytes) throw new Error('File not found')
@@ -74,7 +68,7 @@ export function createFakeServices() {
 
   const clipboard = {
     readText: vi.fn<Clipboard['readText']>(async () => null),
-    writeSecret: vi.fn<NonNullable<Clipboard['writeSecret']>>(async () => {}),
+    writeSecret: vi.fn<Clipboard['writeSecret']>(async () => {}),
     clear: vi.fn<Clipboard['clear']>(async () => {})
   }
 

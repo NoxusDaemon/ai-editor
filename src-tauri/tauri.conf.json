@@ -4,9 +4,9 @@
   "version": "../package.json",
   "identifier": "org.nightly.ai-editor",
   "build": {
-    "beforeDevCommand": "bun run dev",
+    "beforeDevCommand": "bun run frontend:dev",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "bun run build",
+    "beforeBuildCommand": "bun run frontend:build",
     "frontendDist": "../.output/public"
   },
   "app": {

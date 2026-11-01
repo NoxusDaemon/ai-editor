@@ -32,7 +32,7 @@ export async function clearCopiedText(clipboard: Clipboard): Promise<boolean> {
   }
 }
 
-/** Text from an encrypted workspace is copied as a secret, where the platform supports it. */
+/** Text from an encrypted workspace is copied as a secret. */
 function secretWriter() {
   return useDocumentStore().encrypted ? useServices().clipboard.writeSecret : null
 }
@@ -58,7 +58,7 @@ function copiedTextOf(event: ClipboardEvent): string {
   return document.getSelection()?.toString() ?? ''
 }
 
-/** Does what the browser would have done for a cut in a plain text field. */
+/** Does what the webview would have done for a cut in a plain text field. */
 function deleteFieldSelection() {
   const field = document.activeElement
   if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) || field.readOnly) return
@@ -82,7 +82,7 @@ export function useCopyTracking() {
     if (!write || !event.clipboardData) return
     // An editor that handled the event has already deleted the selection for a cut.
     const handled = event.defaultPrevented
-    // Cancelling with no data stops the browser writing anything for Windows to record.
+    // Cancelling with no data stops the webview writing anything for Windows to record.
     event.preventDefault()
     event.clipboardData.clearData()
     if (event.type === 'cut' && !handled) deleteFieldSelection()

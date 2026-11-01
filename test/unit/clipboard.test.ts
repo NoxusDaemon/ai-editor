@@ -5,7 +5,7 @@ import type { Clipboard } from '~/services/clipboard'
 function fakeClipboard(text: string | null) {
   return {
     readText: vi.fn<Clipboard['readText']>(async () => text),
-    writeSecret: null,
+    writeSecret: vi.fn<Clipboard['writeSecret']>(async () => {}),
     clear: vi.fn<Clipboard['clear']>(async () => {})
   }
 }

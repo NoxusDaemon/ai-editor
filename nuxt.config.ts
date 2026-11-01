@@ -15,7 +15,6 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'AI Editor',
       htmlAttrs: { lang: 'en' }
     }
   },
@@ -26,8 +25,8 @@ export default defineNuxtConfig({
   ignore: ['**/src-tauri/**'],
 
   devServer: {
-    // Lets `tauri dev` reach the dev server from a phone/emulator when TAURI_DEV_HOST is set.
-    host: process.env.TAURI_DEV_HOST || 'localhost'
+    // Only the Tauri window loads the dev server.
+    host: 'localhost'
   },
 
   compatibilityDate: '2026-10-01',

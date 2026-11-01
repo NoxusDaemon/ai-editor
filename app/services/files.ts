@@ -1,11 +1,8 @@
 /**
- * File access for the two runtimes the app supports:
- * - Tauri desktop: native dialogs + the fs plugin (scoped to picked files), with
- *   saves going through the app's atomic `write_file_atomic` command.
- * - Browser (`bun run dev`): File System Access API, falling back to
- *   upload/download where it is unavailable.
+ * File access: native dialogs + the fs plugin (scoped to picked files), with
+ * saves going through the app's atomic `write_file_atomic` command.
  */
-import { invoke, isTauri } from '@tauri-apps/api/core'
+import { invoke } from '@tauri-apps/api/core'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import { readFile } from '@tauri-apps/plugin-fs'
 
@@ -13,10 +10,8 @@ export type DocumentKind = 'json' | 'encrypted'
 
 export interface FileRef {
   readonly name: string
-  /** Absolute path in the desktop app. */
+  /** Absolute path. Absent for a dropped file, which can't be written back, so saving asks where to. */
   readonly path?: string
-  /** File System Access handle in the browser. */
-  readonly handle?: FileSystemFileHandle
 }
 
 export interface OpenedFile {
@@ -29,12 +24,9 @@ export interface FileSystem {
   pickAndRead(): Promise<OpenedFile | null>
   /** Asks the user where to save. `null` when cancelled. */
   pickSaveTarget(kind: DocumentKind, suggestedName: string): Promise<FileRef | null>
+  /** Replaces the file at `ref.path`. */
   write(ref: FileRef, bytes: Uint8Array): Promise<void>
-  /** Whether `write` updates the file in place, which autosave relies on. */
-  canWriteInPlace(ref: FileRef): boolean
-  /** Whether files can be reopened by path later, e.g. from the recent files list. */
-  readonly remembersPaths: boolean
-  /** Reads a file picked in an earlier session. Only when `remembersPaths`. */
+  /** Reads a file picked in an earlier session, e.g. from the recent files list. */
   reopen(path: string): Promise<OpenedFile>
 }
 
@@ -53,7 +45,7 @@ export function withExtension(name: string, kind: DocumentKind): string {
   return `${stem}.${FILE_EXTENSIONS[kind]}`
 }
 
-export function createTauriFileSystem(): FileSystem {
+export function createFileSystem(): FileSystem {
   return {
     async pickAndRead() {
       const path = await open({
@@ -82,102 +74,9 @@ export function createTauriFileSystem(): FileSystem {
       await invoke('write_file_atomic', bytes, { headers: { path: encodeURIComponent(ref.path) } })
     },
 
-    canWriteInPlace: ref => !!ref.path,
-
     // Picked paths stay in the fs scope across restarts (persisted-scope plugin).
-    remembersPaths: true,
-
     async reopen(path) {
       return { ref: { name: basename(path), path }, bytes: await readFile(path) }
     }
   }
-}
-
-interface FilePickerType {
-  description: string
-  accept: Record<string, string[]>
-}
-
-interface FilePickerWindow {
-  showOpenFilePicker?: (options: { types: FilePickerType[] }) => Promise<FileSystemFileHandle[]>
-  showSaveFilePicker?: (options: { suggestedName: string, types: FilePickerType[] }) => Promise<FileSystemFileHandle>
-}
-
-const PICKER_TYPES: Record<DocumentKind, FilePickerType> = {
-  json: { description: FILTER_NAMES.json, accept: { 'application/json': ['.json'] } },
-  encrypted: { description: FILTER_NAMES.encrypted, accept: { 'application/octet-stream': ['.aienc'] } }
-}
-
-const isAbortError = (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
-
-function chooseWithInput(): Promise<File | null> {
-  return new Promise((resolve) => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = '.json,.aienc,application/json'
-    input.addEventListener('change', () => resolve(input.files?.[0] ?? null), { once: true })
-    input.addEventListener('cancel', () => resolve(null), { once: true })
-    input.click()
-  })
-}
-
-function download(name: string, bytes: Uint8Array) {
-  const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)]))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = name
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 0)
-}
-
-export function createBrowserFileSystem(): FileSystem {
-  const pickers = window as Window & FilePickerWindow
-
-  return {
-    async pickAndRead() {
-      if (!pickers.showOpenFilePicker) {
-        const file = await chooseWithInput()
-        return file ? { ref: { name: file.name }, bytes: new Uint8Array(await file.arrayBuffer()) } : null
-      }
-      try {
-        const [handle] = await pickers.showOpenFilePicker({ types: [PICKER_TYPES.json, PICKER_TYPES.encrypted] })
-        if (!handle) return null
-        const file = await handle.getFile()
-        return { ref: { name: file.name, handle }, bytes: new Uint8Array(await file.arrayBuffer()) }
-      } catch (error) {
-        if (isAbortError(error)) return null
-        throw error
-      }
-    },
-
-    async pickSaveTarget(kind, suggestedName) {
-      // Without the File System Access API every save becomes a download.
-      if (!pickers.showSaveFilePicker) return { name: suggestedName }
-      try {
-        const handle = await pickers.showSaveFilePicker({ suggestedName, types: [PICKER_TYPES[kind]] })
-        return { name: handle.name, handle }
-      } catch (error) {
-        if (isAbortError(error)) return null
-        throw error
-      }
-    },
-
-    async write(ref, bytes) {
-      if (!ref.handle) return download(ref.name, bytes)
-      // Writes go to a swap file that replaces the original on close, so they are atomic.
-      const writable = await ref.handle.createWritable()
-      await writable.write(new Uint8Array(bytes))
-      await writable.close()
-    },
-
-    canWriteInPlace: ref => !!ref.handle,
-
-    remembersPaths: false,
-
-    reopen: () => Promise.reject(new Error('Reopening files by path is only possible in the desktop app.'))
-  }
-}
-
-export function createFileSystem(): FileSystem {
-  return isTauri() ? createTauriFileSystem() : createBrowserFileSystem()
 }

@@ -58,7 +58,6 @@ fn write_file_atomic<R: Runtime>(webview: Webview<R>, request: Request<'_>) -> R
     replace_file(&path, bytes).map_err(|error| format!("Could not write {}: {error}", path.display()))
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
