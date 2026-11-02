@@ -30,6 +30,8 @@ export interface PromptRequest {
   title: string
   description?: string
   submitLabel?: string
+  /** Closes the question (answering `null`) when aborted, e.g. when the run stops. */
+  signal?: AbortSignal
 }
 
 export interface Notice {

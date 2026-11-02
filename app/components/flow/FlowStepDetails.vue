@@ -12,6 +12,7 @@
         />
         {{ STATUS[step.status].label }}
       </span>
+      <span v-if="step.branch">In {{ step.branch }}</span>
       <span v-if="step.visit > 1">Run {{ step.visit }}</span>
       <span v-if="duration">{{ duration }}</span>
       <span v-if="step.model">{{ step.model }}</span>

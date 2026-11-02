@@ -1,12 +1,12 @@
 # AI Editor
 
-A desktop editor for designing agentic conversations with local models in [LM Studio](https://lmstudio.ai). Lay out a conversation as a flow chart: segments that talk to the model, conditions, loops, variables, memory, retrieval (RAG) and questions for the user, with containers that share settings. Zoom into any segment to edit its system, user and assistant blocks as a classic prompt editor. Save the whole workspace as JSON or as a password-encrypted file.
+A desktop editor for designing agentic conversations with local models in [LM Studio](https://lmstudio.ai). Lay out a conversation as a flow chart: segments that talk to the model, conditions, loops, parallel branches, variables, memory, retrieval (RAG) and questions for the user, with containers that share settings. Zoom into any segment to edit its system, user and assistant blocks as a classic prompt editor. Save the whole workspace as JSON or as a password-encrypted file.
 
 Built with Nuxt 4, Nuxt UI 4, Pinia, Vue Flow and Tauri 2. See [docs/FLOWS.md](docs/FLOWS.md) for the full guide.
 
 ## Features
 
-- **Flow canvas** – each session is a graph that a run walks from Start, like a state machine. Pan, zoom and a minimap. Cards show more detail as you zoom in. Problems with the flow show on the cards before you run it. Undo and redo cover every edit.
+- **Flow canvas** – each session is a graph that a run walks from Start, like a state machine. Pan, zoom and a minimap. Cards show more detail as you zoom in. Problems with the flow show on the cards before you run it. Undo and redo cover every edit (flows with very large documents keep fewer undo steps).
 - **Zoom in to edit** – click a node and the canvas zooms into it, opening its editor at full size. Escape zooms back out.
 - **Segments** – messages for the model, templated with `{{placeholders}}`.
   - Each segment can use its own model, temperature and token limit, or inherit them from its group or the flow.
@@ -19,6 +19,7 @@ Built with Nuxt 4, Nuxt UI 4, Pinia, Vue Flow and Tauri 2. See [docs/FLOWS.md](d
   - **Loops**: a number of times, for each item, or while true, with a limit.
   - **Set variables**: for state machines.
   - **Ask user**: human in the loop.
+  - **Parallel and Join**: run several paths at the same time, or one path for each item of a list, and collect their results at a Join. Each branch works on its own copy of the conversation and variables, and branches merge in branch order, so a run comes out the same whichever branch finishes first. Wait for every branch or just the first, limit how many run at once, and take a separate path if one fails.
   - Cycles are allowed, with a step limit as a safety net.
   - A small, safe expression language (no `eval`) for conditions and placeholders.
 - **Groups** – containers whose system prompt, model, sampling, context and setup-only settings apply to every segment inside, nested groups included. Memory and knowledge placed in a group feed everything in it.
@@ -29,12 +30,12 @@ Built with Nuxt 4, Nuxt UI 4, Pinia, Vue Flow and Tauri 2. See [docs/FLOWS.md](d
   - Keyword (BM25), semantic (LM Studio embeddings, cached) or hybrid (reciprocal rank fusion) search, optionally preferring varied passages (MMR).
   - Numbered passages for citations, and a test search box.
 - **Run panel** – every step with exactly what was sent to the model, the streamed reply and reasoning, retrieved passages and scores, attempts and timing. Also the conversation as it built up, the variables, and the output. The canvas highlights the running node and the path taken.
-- **Templates** – conversation, chatbot with memory, knowledge Q&A, router, draft–critique–revise loop, and structured extraction.
+- **Templates** – conversation, chatbot with memory, knowledge Q&A, router, draft–critique–revise loop, several perspectives (parallel), summarise in parts (map-reduce), and structured extraction.
 - **Prompt blocks** – inside a segment, system, user and assistant messages in a rich Markdown editor. Drag to reorder, change a block's role, copy or remove it.
 - **Snippets** – trays of reusable text. Drag a snippet into any prompt and it lands as a word of its own, with a space after it so the next one can follow. Group snippets under named section headings, and switch on Arrange to reorder snippets and headings. Snippets are never sent to the model.
 - **Snippet sidebars** – two more trays at the left and right window edges, shared by every session and saved with the workspace. They slide in when the pointer reaches the edge and can be pinned open.
 - **Sessions** – one tab per conversation. Double-click or press F2 to rename, right-click to duplicate, middle-click to close. Hovering over a tab while dragging text switches to it.
-- **Streaming replies** – in a segment, Send (Ctrl/⌘ + Enter) tries it on its own, streaming a reply into the trailing empty assistant block, or a new one. Stop at any time and keep the partial text. Reasoning ("thinking") output is shown separately and never saved. Tokens per second are shown when it finishes.
+- **Streaming replies** – in a segment, Send (Ctrl/⌘ + Enter) tries it on its own, with the system prompts it inherits and its placeholders filled in from the run input and the last run, streaming a reply into the trailing empty assistant block, or a new one. Stop at any time and keep the partial text. Reasoning ("thinking") output is shown separately and never saved. Tokens per second are shown when it finishes.
 - **Files** – open, save, save as JSON, or save encrypted. Drop a file anywhere on the window to open it. Files from earlier versions of the app (plain or encrypted) still open.
 - **Autosave** – optional, debounced, and only for files that have a location on disk.
 - **Crash-safe saves** – saves go to a temporary file that is renamed over the original, so a crash or power cut never leaves a half-written workspace.
@@ -92,8 +93,8 @@ app/
 │   ├── blocks.ts      Message and snippet blocks, and what a segment's Send sends
 │   ├── flow/          The flow model and its interpreter (see docs/FLOWS.md)
 │   │   ├── types.ts        Nodes, edges, settings and defaults
-│   │   ├── graph.ts        Connection rules, nesting, inherited settings, context sources
-│   │   ├── engine.ts       Runs a flow step by step; the model, embeddings and questions are passed in
+│   │   ├── graph.ts        Connection rules, nesting, inherited settings, context sources, where branches meet
+│   │   ├── engine.ts       Runs a flow step by step, branches in parallel; the model, embeddings and questions are passed in
 │   │   ├── expression.ts   Safe expression language (template.ts fills in {{placeholders}})
 │   │   ├── json-schema.ts  Structured-output validation (CSP-safe) and JSON extraction
 │   │   ├── retrieval.ts    Chunking, BM25, embedding similarity, rank fusion, MMR

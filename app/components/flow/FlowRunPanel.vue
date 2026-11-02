@@ -66,7 +66,8 @@
               v-for="step in run.steps"
               :key="step.id"
               class="rounded-lg border border-default"
-              :class="{ 'border-info': step.status === 'running', 'border-error/60': step.status === 'error' }"
+              :class="{ 'border-info': step.status === 'running', 'border-error/60': step.status === 'error', 'border-s-2 border-s-violet-500/50': step.branch }"
+              :style="step.branch ? { marginInlineStart: `${step.branch.split(' › ').length * 12}px` } : undefined"
             >
               <button
                 type="button"
@@ -83,6 +84,10 @@
                     v-if="step.visit > 1"
                     class="text-dimmed"
                   > ×{{ step.visit }}</span></span>
+                  <span
+                    v-if="step.branch && step.branch !== step.title"
+                    class="block truncate text-[11px] text-violet-500 dark:text-violet-400"
+                  >{{ step.branch }}</span>
                   <span
                     v-if="summaryOf(step)"
                     class="block truncate text-xs text-muted"

@@ -1,5 +1,6 @@
 <template>
-  <div class="flex min-h-0">
+  <!-- `isolate` keeps the zoomed-in editor's z-index from covering the snippet sidebars. -->
+  <div class="isolate flex min-h-0">
     <div
       ref="stage"
       class="relative min-w-0 flex-1 overflow-hidden"

@@ -1,7 +1,8 @@
 /**
  * LLM access via LM Studio's SDK. The SDK is loaded lazily (it is large) and a
- * single client is shared across the app; it is recreated if the server URL
- * changes or a request fails.
+ * single client is shared across the app; it is replaced if the server URL
+ * changes or a request fails. Several requests can run at once (parallel flow
+ * branches), so a replaced client is only closed once nothing uses it.
  */
 import type { LMStudioClient } from '@lmstudio/sdk'
 import type { ChatMessage, GenerateStats } from '~/lib/blocks'
@@ -67,34 +68,54 @@ async function assertReachable(url: string) {
   }
 }
 
+interface Connection {
+  url: string
+  /** Shared by requests made while it connects, so there is only ever one. */
+  client: Promise<LMStudioClient>
+  /** Requests using it right now. */
+  users: number
+  /** Replaced by a newer connection; closed when its last request is done. */
+  retired: boolean
+}
+
 export function createLmStudioProvider(getServerUrl: () => string = () => ''): LlmProvider {
-  let client: LMStudioClient | undefined
-  let clientUrl: string | undefined
+  let connection: Connection | undefined
 
-  function reset() {
-    void client?.[Symbol.asyncDispose]().catch(() => {})
-    client = undefined
-    clientUrl = undefined
+  function close(conn: Connection) {
+    void conn.client.then(client => client[Symbol.asyncDispose]()).catch(() => {})
   }
 
-  async function getClient(): Promise<LMStudioClient> {
+  /** The next request reconnects from scratch; requests still using this one finish first. */
+  function retire(conn: Connection) {
+    if (connection === conn) connection = undefined
+    conn.retired = true
+    if (!conn.users) close(conn)
+  }
+
+  function connect(): Connection {
     const url = normaliseServerUrl(getServerUrl())
-    if (client && clientUrl === url) return client
-    reset()
-    await assertReachable(url)
-    const { LMStudioClient } = await import('@lmstudio/sdk')
-    client = new LMStudioClient({ baseUrl: url, logger: quietLogger })
-    clientUrl = url
-    return client
+    if (connection?.url === url) return connection
+    if (connection) retire(connection)
+    const client = (async () => {
+      await assertReachable(url)
+      const { LMStudioClient } = await import('@lmstudio/sdk')
+      return new LMStudioClient({ baseUrl: url, logger: quietLogger })
+    })()
+    connection = { url, client, users: 0, retired: false }
+    return connection
   }
 
-  /** Drops the client after a failure so the next call reconnects from scratch. */
   async function withClient<T>(task: (client: LMStudioClient) => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const conn = connect()
+    conn.users++
     try {
-      return await task(await getClient())
+      return await task(await conn.client)
     } catch (error) {
-      if (!signal?.aborted) reset()
+      if (!signal?.aborted) retire(conn)
       throw error
+    } finally {
+      conn.users--
+      if (conn.retired && !conn.users) close(conn)
     }
   }
 

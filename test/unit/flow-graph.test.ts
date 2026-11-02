@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { createBlock } from '~/lib/blocks'
 import {
   absolutePosition,
+  branchNames,
+  branchPaths,
   canConnect,
   cloneFlow,
   connectEdges,
   contextSources,
   groupAt,
+  joinOf,
   keyFromTitle,
   outputHandles,
   resolveSettings,
@@ -46,6 +49,32 @@ describe('flow graph', () => {
   it('names condition handles after their branches', () => {
     const condition = createNode('condition', { key: 'c', branches: [{ id: 'x', label: 'Yes', expression: 'true' }, { id: 'y', label: '', expression: 'vars.n > 1' }] })
     expect(outputHandles(condition)).toEqual([{ id: 'x', label: 'Yes' }, { id: 'y', label: 'vars.n > 1' }, { id: 'else', label: 'Else' }])
+  })
+
+  it('gives Parallel nodes an output per branch, or one for each item, and Joins a failure output', () => {
+    const fan = createNode('parallel', { key: 'p', branches: [{ id: 'x', label: 'Critic A' }, { id: 'y', label: '' }, { id: 'z', label: 'critic a' }] })
+    expect(outputHandles(fan)).toEqual([{ id: 'x', label: 'Critic A' }, { id: 'y', label: 'Branch 2' }, { id: 'z', label: 'critic a' }])
+    expect(branchNames(fan)).toEqual(['critic_a', 'branch2', 'critic_a2'])
+    expect(outputHandles({ ...fan, mode: 'map' })).toEqual([{ id: 'each', label: 'Each item' }])
+    expect(outputHandles(createNode('join', { key: 'j' })).map(h => h.id)).toEqual(['out', 'error'])
+  })
+
+  it('finds the Join where a Parallel node’s branches meet, past nested ones', () => {
+    const outer = createNode('parallel', { key: 'outer', branches: [{ id: 'a', label: '' }, { id: 'b', label: '' }] })
+    const inner = createNode('parallel', { key: 'inner', branches: [{ id: 'c', label: '' }] })
+    const innerJoin = createNode('join', { key: 'inner_join' })
+    const outerJoin = createNode('join', { key: 'outer_join' })
+    const step = createNode('set', { key: 'step', assignments: [] })
+    const flow = flowOf([outer, inner, innerJoin, outerJoin, step], [
+      createEdge(outer.id, 'a', inner.id),
+      createEdge(inner.id, 'c', innerJoin.id),
+      createEdge(innerJoin.id, 'out', outerJoin.id),
+      createEdge(outer.id, 'b', step.id),
+      createEdge(step.id, 'out', outerJoin.id)
+    ])
+    expect(joinOf(flow, outer)?.id).toBe(outerJoin.id)
+    expect(joinOf(flow, inner)?.id).toBe(innerJoin.id)
+    expect(branchPaths(flow, outer)).toEqual({ joins: [outerJoin], ends: [] })
   })
 
   it('inherits settings from the nearest group, then the flow', () => {
@@ -152,6 +181,26 @@ describe('validateFlow', () => {
     expect(messages).toMatch(/Two nodes use the key “seg”/)
     expect(messages).toMatch(/case 1 is empty/)
     expect(messages).toMatch(/needs an embedding model/)
+  })
+
+  it('checks where Parallel branches meet', () => {
+    const start = createNode('start', { key: 'start' })
+    const fan = createNode('parallel', { key: 'fan', branches: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] })
+    const joinA = createNode('join', { key: 'join_a' })
+    const joinB = createNode('join', { key: 'join_b' })
+    const end = createNode('end', { key: 'end' })
+    const stray = createNode('join', { key: 'stray' })
+    const messages = (edges: Flow['edges'], nodes: FlowNode[] = [start, fan, joinA, joinB, end]) =>
+      validateFlow(flowOf(nodes, [createEdge(start.id, 'out', fan.id), ...edges])).map(issue => `${issue.severity}: ${issue.message}`)
+
+    expect(messages([createEdge(fan.id, 'a', joinA.id), createEdge(fan.id, 'b', joinB.id)])).toContainEqual(expect.stringMatching(/^error: .*lead to different Joins/))
+    expect(messages([createEdge(fan.id, 'a', joinA.id), createEdge(fan.id, 'b', end.id)])).toContainEqual(expect.stringMatching(/^error: .*can reach “End”/))
+    expect(messages([createEdge(fan.id, 'a', end.id)], [start, fan, end])).toContainEqual(expect.stringMatching(/^warning: .*don't meet at a Join/))
+    expect(messages([createEdge(fan.id, 'a', joinA.id)], [start, fan, joinA, stray])).toEqual([
+      'warning: “Parallel”: branch “B” has nothing connected.',
+      'warning: “Join” is never reached from Start.',
+      'warning: No Parallel node\'s branches meet at “Join”, so it only passes the run on.'
+    ])
   })
 
   it('warns about unreachable nodes and cycles that never end', () => {

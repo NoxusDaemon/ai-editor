@@ -1,10 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import { createBatcher } from '~/lib/batch'
+import { createBatcher, STREAM_FLUSH_MS } from '~/lib/batch'
+import { normalizeMessages } from '~/lib/flow/engine'
 import { resolveSettings } from '~/lib/flow/graph'
-import { hasPrompt, planGeneration } from '~/lib/workspace'
+import { renderTemplate } from '~/lib/flow/template'
+import type { StartNode } from '~/lib/flow/types'
+import { hasPrompt, planGeneration, type ChatMessage } from '~/lib/workspace'
 import { errorMessage, useServices } from '~/services/container'
 import type { GenerateStats, ModelOption } from '~/services/llm'
+import { useFlowRunStore } from './flowRun'
 import { useSettingsStore } from './settings'
 import { useWorkspaceStore } from './workspace'
 
@@ -21,16 +25,16 @@ export interface GenerationRun {
   error?: string
 }
 
-export const STREAM_FLUSH_MS = 50
-
 /**
  * The segment playground: streams a reply into a segment's blocks, as the
- * classic editor did, with the model and sampling settings the segment
- * inherits. Also owns the model lists. Running whole flows is `flowRun`.
+ * classic editor did, with the model, sampling settings and system prompts the
+ * segment inherits. Placeholders are filled in from the Start node's input and
+ * the flow's last run. Also owns the model lists. Running whole flows is `flowRun`.
  */
 export const useGenerationStore = defineStore('generation', () => {
   const workspace = useWorkspaceStore()
   const settings = useSettingsStore()
+  const flowRun = useFlowRunStore()
 
   /** Latest run per segment id. Runtime-only state, never persisted. */
   const runs = ref<Record<string, GenerationRun>>({})
@@ -73,12 +77,35 @@ export const useGenerationStore = defineStore('generation', () => {
       return
     }
 
+    const { model, temperature, maxTokens, system } = resolveSettings(session.flow, session.model, segment)
+    // What a run would have at this point: the input, and the variables and outputs of the last run.
+    const last = flowRun.runs[sessionId]?.state
+    const scope = {
+      input: session.flow.nodes.find((node): node is StartNode => node.kind === 'start')?.input ?? '',
+      vars: last?.vars ?? {},
+      nodes: last?.nodes ?? {},
+      last: null,
+      error: null,
+      memory: {},
+      loop: null,
+      branch: null
+    }
+    let messages: ChatMessage[]
+    try {
+      messages = normalizeMessages([
+        ...system.map(content => ({ role: 'system' as const, content: renderTemplate(content, scope) })),
+        ...plan.messages.map(message => ({ ...message, content: renderTemplate(message.content, scope) }))
+      ])
+    } catch (error) {
+      dialogs.notify({ title: 'Could not fill in the placeholders', description: errorMessage(error), color: 'error' })
+      return
+    }
+
     const created = plan.targetBlockId === null
     const target = created
       ? workspace.addBlock(sessionId, segmentId, 'assistant')
       : workspace.findBlock(sessionId, segmentId, plan.targetBlockId!, 'message')
     if (!target) return
-    const { model, temperature, maxTokens } = resolveSettings(session.flow, session.model, segment)
 
     const controller = new AbortController()
     controllers.set(segmentId, controller)
@@ -97,7 +124,7 @@ export const useGenerationStore = defineStore('generation', () => {
     try {
       run.stats = await llm.generate({
         model,
-        messages: plan.messages,
+        messages,
         ...(temperature !== null && { temperature }),
         ...(maxTokens !== null && { maxTokens }),
         signal: controller.signal,

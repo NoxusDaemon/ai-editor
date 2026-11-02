@@ -2,7 +2,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { FLOW_TEMPLATES } from '~/lib/flow/templates'
 import { createDefaultSession, createSection, createSidebars, createSnippet } from '~/lib/workspace'
-import { useWorkspaceStore } from '~/stores/workspace'
+import { HISTORY_MAX_CHARS, useWorkspaceStore } from '~/stores/workspace'
 
 function setup() {
   const workspace = useWorkspaceStore()
@@ -117,6 +117,19 @@ describe('workspace store', () => {
     expect(flow().edges).toHaveLength(2)
   })
 
+  it('never deletes or copies the Start node, which the palette cannot add back', () => {
+    const { workspace, session, flow } = setup()
+    const start = flow().nodes.find(n => n.kind === 'start')!
+    const before = { ...start.position }
+    const group = workspace.groupNodes(session.id, [start.id])!
+
+    expect(workspace.duplicateNodes(session.id, [start.id])).toEqual([])
+    workspace.removeNodes(session.id, [group.id, start.id])
+
+    expect(flow().nodes.filter(n => n.kind === 'start')).toEqual([expect.objectContaining({ id: start.id, parentId: null, position: before })])
+    expect(flow().nodes.some(n => n.id === group.id)).toBe(false)
+  })
+
   it('drops the edge of a removed condition branch', () => {
     const { workspace, session, flow } = setup()
     const condition = workspace.addNode(session.id, 'condition', { x: 0, y: 0 })!
@@ -127,6 +140,17 @@ describe('workspace store', () => {
     workspace.updateNode(session.id, condition.id, { branches: [] })
 
     expect(flow().edges.some(e => e.sourceHandle === branch.id)).toBe(false)
+  })
+
+  it('drops branch edges when a Parallel node switches to one path per item', () => {
+    const { workspace, session, flow } = setup()
+    const fan = workspace.addNode(session.id, 'parallel', { x: 0, y: 0 })!
+    const end = flow().nodes.find(n => n.kind === 'end')!
+    workspace.connect(session.id, { source: fan.id, sourceHandle: fan.branches[0]!.id, target: end.id })
+
+    workspace.updateNode(session.id, fan.id, { mode: 'map' })
+    expect(flow().edges.some(e => e.source === fan.id)).toBe(false)
+    expect(workspace.connect(session.id, { source: fan.id, sourceHandle: 'each', target: end.id })).toBe(true)
   })
 
   it('renames keys only to free, valid identifiers', () => {
@@ -199,6 +223,18 @@ describe('workspace store', () => {
     workspace.redo(session.id)
     expect(flow().nodes.find(n => n.id === note.id)).toMatchObject({ text: 'ab' })
     expect(workspace.redo(session.id)).toBe(false)
+  })
+
+  it('keeps fewer undo steps for flows with large documents', () => {
+    const { workspace, session } = setup()
+    const knowledge = workspace.addNode(session.id, 'knowledge', { x: 0, y: 0 })!
+    workspace.updateNode(session.id, knowledge.id, { documents: [{ id: 'd', name: 'Big', text: 'x'.repeat(HISTORY_MAX_CHARS / 4) }] })
+    for (let i = 0; i < 10; i++) workspace.addNode(session.id, 'note', { x: i, y: 0 })
+
+    let steps = 0
+    while (workspace.undo(session.id)) steps++
+    expect(steps).toBeGreaterThan(1)
+    expect(steps).toBeLessThan(5)
   })
 
   it('renames, ignoring blank names', () => {

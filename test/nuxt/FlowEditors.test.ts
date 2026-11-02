@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import FlowConditionEditor from '~/components/flow/FlowConditionEditor.vue'
+import FlowJoinEditor from '~/components/flow/FlowJoinEditor.vue'
 import FlowNodeFocus from '~/components/flow/FlowNodeFocus.vue'
+import FlowParallelEditor from '~/components/flow/FlowParallelEditor.vue'
 import FlowSetEditor from '~/components/flow/FlowSetEditor.vue'
 import type { FlowNode } from '~/lib/flow/types'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -45,6 +47,34 @@ describe('flow editors', () => {
     await expression!.setValue('"review"')
 
     expect(workspace.findNode(session.id, set.id, 'set')!.assignments[0]).toMatchObject({ name: 'state', expression: '"review"' })
+  })
+
+  it('edits a Parallel node’s branches, mode and concurrency', async () => {
+    const { workspace, session, node } = setup()
+    const fan = node('parallel')
+    const wrapper = await mountInApp(FlowParallelEditor, { sessionId: session.id, node: fan })
+    const current = () => workspace.findNode(session.id, fan.id, 'parallel')!
+
+    await wrapper.get('[data-testid=add-parallel-branch]').trigger('click')
+    expect(current().branches.map(b => b.label)).toEqual(['Branch 1', 'Branch 2', 'Branch 3'])
+
+    await wrapper.findAll('[data-testid=parallel-branch] input')[0]!.setValue('Critic A')
+    expect(current().branches[0]!.label).toBe('Critic A')
+    expect(wrapper.text()).toContain('.critic_a')
+
+    await wrapper.get('input[data-testid=parallel-concurrency]').setValue('0')
+    expect(current().concurrency).toBe(1)
+  })
+
+  it('explains what a Join collects', async () => {
+    const { workspace, session, node } = setup()
+    const fan = node('parallel')
+    const meet = node('join')
+    workspace.connect(session.id, { source: fan.id, sourceHandle: fan.branches[0]!.id, target: meet.id })
+    const wrapper = await mountInApp(FlowJoinEditor, { sessionId: session.id, node: meet })
+
+    expect(wrapper.text()).toContain('Joins the branches of “Parallel”')
+    expect(wrapper.text()).toContain('{{nodes.join.output.branch_1}}')
   })
 
   it('opens a segment with its messages, settings and a schema check', async () => {

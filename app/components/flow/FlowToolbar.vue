@@ -93,7 +93,7 @@
         aria-label="Run input"
         data-testid="run-input"
         @update:model-value="input => workspace.updateNode(session.id, start!.id, { input: String(input) })"
-        @keydown.enter.prevent="flowRun.toggle(session.id)"
+        @keydown.enter.prevent="running || run()"
       />
       <ModelSelect
         :model-value="session.model"

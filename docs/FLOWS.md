@@ -1,6 +1,6 @@
 # Flows
 
-Each session is a **flow**: a graph that decides how the conversation with the model is built and in what order things happen. A run starts at **Start** and moves one node at a time, like a state machine. Each node does its work, then leaves by one of its outputs, and the edge on that output decides what runs next. The run ends at an **End** node, at an output with nothing connected, or when you stop it.
+Each session is a **flow**: a graph that decides how the conversation with the model is built and in what order things happen. A run starts at **Start** and moves one node at a time, like a state machine. Each node does its work, then leaves by one of its outputs, and the edge on that output decides what runs next. The run ends at an **End** node, at an output with nothing connected, or when you stop it. A **Parallel** node splits the run into branches that run at the same time and meet again at a **Join**.
 
 Click a node on the canvas to zoom into it and edit it at full size. A segment opens as the classic editor: system, user and assistant blocks, snippet trays, and Send. Press Escape or **← Flow** to zoom back out. Clicking a group zooms the canvas to fit that group; its ⚙ button opens the group's settings.
 
@@ -14,6 +14,8 @@ Click a node on the canvas to zoom into it and edit it at full size. A segment o
 | **Loop** | Repeats a path a number of times, once per item in a list, or while an expression is true (with a safety limit). Connect the end of the path back to the loop. | *Each time*, *Done* |
 | **Set variables** | Sets `vars.<name>` from expressions, e.g. a state machine's state, counters, or lists you build up. | next |
 | **Ask user** | Pauses and asks whoever is running the flow (human in the loop). Declining stops the run. | next |
+| **Parallel** | Runs several paths at the same time: one per branch, or one per item in a list. | one per branch, or *Each item* |
+| **Join** | Waits for a Parallel node's branches and collects their outputs. | next, *If a branch fails* |
 | **End** | Finishes the run with a result (`{{last}}` by default). | none |
 | **Memory** | Not a step. Injected into the segments it is connected to, or into every segment of the group it sits in. | context |
 | **Knowledge** | Not a step. Documents to retrieve passages from (RAG), injected like memory. | context |
@@ -33,6 +35,25 @@ Each output leads to one place, so every transition is unambiguous. Connecting a
 - **Save as variable** also stores the output in `vars.<name>`.
 - **Write to memory** appends the output to store memories.
 - **On error**: if something is connected to it, a failure (for example retries exhausted) goes down that path with `{{error}}` set, instead of stopping the run.
+
+### Parallel and Join
+
+A **Parallel** node runs paths at the same time:
+
+- **Branches**: one output per branch, e.g. three reviewers with different instructions.
+- **For each item**: the *Each item* path runs once for every item of a list (an expression such as `vars.parts`), e.g. summarising every part of a long text. Each run sees its item as `{{branch.item}}`.
+
+Lead every branch to the same **Join** node. The run carries on from the Join once the branches are done.
+
+- **Each branch works on its own copy** of the conversation, variables, node outputs and memory, so branches never see each other's work.
+- **At the Join, branches merge in branch order** (item order for *For each item*), never in the order they finished, so a run gives the same result however long each branch takes. If two branches set the same variable, the later branch wins. Memory entries they wrote are kept, in branch order.
+- **The Join's output** (`{{nodes.<join>.output}}`, also `{{last}}`) holds each branch's last output: an object keyed by branch name, e.g. `{{nodes.views.output.skeptic}}`, or a list for *For each item*.
+- **Wait for**: every branch, or *the first to finish*, which stops the others and outputs the winner's result.
+- **Keep the branches' messages in the conversation**: off by default, so only the Join's output carries on. On: what the branches added follows in branch order.
+- **At most at once** limits how many branches run together. LM Studio queues requests a loaded model can't take yet; loading a model with more parallel predictions lets it answer several at once, each a little slower.
+- **If a branch fails**, the other branches are stopped. With something connected to the Join's *If a branch fails*, the run goes there with the error in `{{error}}`; otherwise the run fails.
+- Branches can't end the run: an End node inside a branch is an error. Questions from Ask nodes in different branches are asked one at a time.
+- Parallel nodes can be nested, each with its own Join.
 
 ### Groups
 
@@ -92,8 +113,9 @@ Write `{{ … }}` in any message or template. Inside, use an **expression**:
 | `vars.<name>` | Variables from Set, Ask and "Save as". |
 | `nodes.<key>.output` / `.text` / `.visits` / `.error` | Any node that has run. The key is shown on each card and can be renamed. |
 | `loop.index` / `loop.iteration` / `loop.item` / `loop.total` | The loop being run. |
+| `branch.name` / `branch.index` / `branch.item` / `branch.total` | The Parallel branch being run. |
 | `memory.<key>` | A memory's current text. |
-| `error` | The latest error, on an *On error* path. |
+| `error` | The latest error, on an *On error* or *If a branch fails* path. |
 
 Expressions support:
 
@@ -110,12 +132,12 @@ The **Variables** button in a node's editor lists what's available. Drag an item
 
 ## Running
 
-- **Run** (Ctrl/⌘ + Enter on the canvas) runs from Start with the input in the toolbar. Inside a zoomed-in segment, Ctrl/⌘ + Enter is that segment's Send, which tries it on its own like the classic editor.
+- **Run** (Ctrl/⌘ + Enter on the canvas) runs from Start with the input in the toolbar. Inside a zoomed-in segment, Ctrl/⌘ + Enter is that segment's Send, which tries it on its own like the classic editor: with the system prompts it inherits, and its placeholders filled in from the Start node's input and the variables and outputs of the last run.
 - The flow is checked first. Errors (such as an invalid expression, a broken schema, no Start, or duplicate keys) stop the run. Warnings (such as an unreachable node, or a cycle with no condition, loop or question) don't. Problems show on the cards and in the toolbar.
 - A run works on a copy of the flow, so editing during a run doesn't change it halfway.
-- **Step limit** (flow settings, default 200): a run stops after this many steps, so a loop that never ends can't run forever.
+- **Step limit** (flow settings, default 200): a run stops after this many steps, counted across all branches, so a loop that never ends can't run forever.
 - The **run panel** shows:
-  - every step: what was sent, the streamed reply, reasoning, retrieved passages and scores, attempts, timing and tokens
+  - every step: what was sent, the streamed reply, reasoning, retrieved passages and scores, attempts, timing and tokens. Steps in Parallel branches are indented and labelled with their branch.
   - the conversation as it built up
   - the variables
   - the output
@@ -148,6 +170,8 @@ Start a new session from a template (the ⌄ next to + in the tabs, or **Templat
 | **Knowledge Q&A (RAG)** | Rewrite the question into a search query (setup only, schema) → answer from retrieved passages with citations. |
 | **Router** | Classify with a schema-constrained enum → condition → specialised segments in a group with a shared system prompt. |
 | **Draft, critique, revise** | Reflection: a loop where an editor (schema score and feedback) critiques against a style-guide memory, and a reviser rewrites until the score is good enough. |
+| **Several perspectives** | Fan-out: three isolated, setup-only segments in a group answer at the same time, and a final segment weighs up their views from the Join. |
+| **Summarise in parts** | Map-reduce: split a text into parts, summarise every part at the same time, then combine the summaries. |
 | **Structured extraction** | Extract JSON matching a schema, compute a value from it, and return the merged result. |
 
 ## Under the hood
@@ -157,8 +181,8 @@ The engine is pure TypeScript with no Vue or I/O. LM Studio, embeddings and the 
 | File | What it holds |
 | --- | --- |
 | `app/lib/flow/types.ts` | The data model and node defaults |
-| `app/lib/flow/graph.ts` | Connection rules, nesting, inherited settings, context sources, copying and repair |
-| `app/lib/flow/engine.ts` | The interpreter |
+| `app/lib/flow/graph.ts` | Connection rules, nesting, inherited settings, context sources, where Parallel branches meet, copying and repair |
+| `app/lib/flow/engine.ts` | The interpreter, including parallel branches (each runs on a copy of the run's state, merged at the Join) |
 | `app/lib/flow/expression.ts`, `template.ts` | The expression language and placeholders |
 | `app/lib/flow/json-schema.ts` | Schema validation (interpreted, CSP-safe) and JSON extraction |
 | `app/lib/flow/retrieval.ts` | Chunking, BM25, cosine similarity, rank fusion, MMR |

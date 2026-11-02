@@ -1,11 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import { createBatcher } from '~/lib/batch'
+import { createBatcher, STREAM_FLUSH_MS } from '~/lib/batch'
 import { runFlow, type RunDeps, type RunEvent, type RunSnapshot, type RunStep } from '~/lib/flow/engine'
 import type { Flow, StartNode } from '~/lib/flow/types'
 import { hasErrors, validateFlow } from '~/lib/flow/validate'
 import { errorMessage, useServices } from '~/services/container'
-import { STREAM_FLUSH_MS } from './generation'
 import { useSettingsStore } from './settings'
 import { useWorkspaceStore } from './workspace'
 
@@ -44,16 +43,22 @@ export const useFlowRunStore = defineStore('flowRun', () => {
 
   const isRunning = (sessionId: string) => runs.value[sessionId]?.status === 'running'
 
-  /** The latest step of each node in the session's last run. */
+  /**
+   * Each node's latest step in the session's last run. A node that is running in
+   * one Parallel branch shows as running even if it has since started in another.
+   */
   function nodeStates(sessionId: string): Map<string, NodeRunState> {
     const states = new Map<string, NodeRunState>()
     for (const step of runs.value[sessionId]?.steps ?? []) {
-      states.set(step.nodeId, { status: step.status, visits: (states.get(step.nodeId)?.visits ?? 0) + 1, step })
+      const previous = states.get(step.nodeId)
+      const shown = previous?.status === 'running' && step.status !== 'running' ? previous.step : step
+      states.set(step.nodeId, { status: shown.status, visits: (previous?.visits ?? 0) + 1, step: shown })
     }
     return states
   }
 
-  async function embed(model: string, texts: string[], signal: AbortSignal): Promise<number[][]> {
+  /** Embeds texts, reusing vectors from earlier runs and test searches. */
+  async function embed(model: string, texts: string[], signal?: AbortSignal): Promise<number[][]> {
     const key = (text: string) => `${model}\u0000${text}`
     const missing = [...new Set(texts.filter(text => !embeddings.has(key(text))))]
     if (missing.length) {
@@ -147,10 +152,10 @@ export const useFlowRunStore = defineStore('flowRun', () => {
     const deps: RunDeps = {
       generate: call => llm.generate(call),
       embed,
-      ask: async ({ nodeId, title, prompt }) => {
+      ask: async ({ nodeId, title, prompt, signal }) => {
         current.waitingNodeId = nodeId
         try {
-          return await dialogs.prompt({ title, description: prompt || undefined, submitLabel: 'Continue' })
+          return await dialogs.prompt({ title, description: prompt || undefined, submitLabel: 'Continue', signal })
         } finally {
           current.waitingNodeId = null
         }
@@ -207,5 +212,5 @@ export const useFlowRunStore = defineStore('flowRun', () => {
     runs.value = Object.fromEntries(Object.entries(runs.value).filter(([id]) => alive.has(id)))
   })
 
-  return { runs, isRunning, nodeStates, run, stop, toggle, clear }
+  return { runs, isRunning, nodeStates, embed, run, stop, toggle, clear }
 })

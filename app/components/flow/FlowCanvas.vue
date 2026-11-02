@@ -16,7 +16,6 @@
       :snap-to-grid="true"
       :snap-grid="[8, 8]"
       :delete-key-code="null"
-      selection-key-code="Shift"
       :multi-selection-key-code="['Control', 'Meta']"
       :zoom-on-double-click="false"
       :connection-radius="28"
@@ -127,17 +126,7 @@ const nodes = computed<Node[]>(() => ordered.value.map(node => ({
 const runStates = computed(() => flowRun.nodeStates(sessionId))
 
 /** Edges the latest run went along. */
-const taken = computed(() => {
-  const steps = flowRun.runs[sessionId]?.steps ?? []
-  const used = new Set<string>()
-  steps.forEach((step, i) => {
-    const next = steps[i + 1]
-    if (!next || !step.handle) return
-    const edge = flow.value.edges.find(e => e.source === step.nodeId && e.sourceHandle === step.handle && e.target === next.nodeId)
-    if (edge) used.add(edge.id)
-  })
-  return used
-})
+const taken = computed(() => new Set((flowRun.runs[sessionId]?.steps ?? []).flatMap(step => step.via ?? [])))
 
 const removeEdge = (id: string) => workspace.removeEdges(sessionId, [id])
 
@@ -285,21 +274,23 @@ function menuFor(id: string): ContextMenuItem[][] {
   const node = workspace.findNode(sessionId, id)
   if (!node) return []
   const target = () => (selectedIds().includes(id) ? selectedIds() : [id])
+  // A flow has exactly one Start: it can't be copied or deleted.
+  const start = node.kind === 'start'
   return [
     [
       { label: node.kind === 'group' ? 'Group settings' : 'Open', icon: 'i-lucide-maximize', onSelect: () => open(id) },
       ...(node.kind === 'group' ? [{ label: 'Zoom to fit', icon: 'i-lucide-scan-search', onSelect: () => zoomToGroup(id) }] : [])
     ],
     [
-      { label: 'Duplicate', icon: 'i-lucide-copy', kbds: ['meta', 'd'], onSelect: () => workspace.duplicateNodes(sessionId, target()) },
+      ...(start ? [] : [{ label: 'Duplicate', icon: 'i-lucide-copy', kbds: ['meta', 'd'], onSelect: () => workspace.duplicateNodes(sessionId, target()) }]),
       { label: 'Put in a group', icon: 'i-lucide-group', kbds: ['meta', 'g'], onSelect: () => workspace.groupNodes(sessionId, target()) },
       ...(node.kind === 'group' ? [{ label: 'Ungroup', icon: 'i-lucide-ungroup', onSelect: () => workspace.ungroup(sessionId, id) }] : []),
       ...(node.parentId ? [{ label: 'Move out of group', icon: 'i-lucide-arrow-left', onSelect: () => workspace.moveOutOfGroup(sessionId, id) }] : [])
     ],
-    [
-      { label: node.kind === 'group' ? 'Delete with contents' : 'Delete', icon: 'i-lucide-trash-2', color: 'error' as const, kbds: ['delete'], onSelect: () => workspace.removeNodes(sessionId, target()) }
-    ]
-  ]
+    start
+      ? []
+      : [{ label: node.kind === 'group' ? 'Delete with contents' : 'Delete', icon: 'i-lucide-trash-2', color: 'error' as const, kbds: ['delete'], onSelect: () => workspace.removeNodes(sessionId, target()) }]
+  ].filter(group => group.length)
 }
 
 const isTyping = (event: KeyboardEvent) => {

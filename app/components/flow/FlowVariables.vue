@@ -67,16 +67,17 @@ const sections = computed(() => {
     if ((node.kind === 'segment' || node.kind === 'ask') && node.saveAs.trim()) vars.add(node.saveAs.trim())
     if (node.kind === 'set') node.assignments.forEach(a => a.name.trim() && vars.add(a.name.trim()))
   }
-  const steps = props.flow.nodes.filter(node => ['segment', 'condition', 'loop', 'set', 'ask', 'start'].includes(node.kind))
+  const steps = props.flow.nodes.filter(node => ['segment', 'condition', 'loop', 'set', 'ask', 'parallel', 'join', 'start'].includes(node.kind))
   const memories = props.flow.nodes.filter(node => node.kind === 'memory')
   const hasLoop = props.flow.nodes.some(node => node.kind === 'loop')
+  const hasParallel = props.flow.nodes.some(node => node.kind === 'parallel')
   return [
     {
       title: 'Run',
       items: [
         { ref: 'input', description: 'The run’s input (Start node)' },
         { ref: 'last', description: 'Output of the previous step' },
-        { ref: 'error', description: 'The latest error, on an “On error” path' }
+        { ref: 'error', description: 'The latest error, on an “On error” or “If a branch fails” path' }
       ]
     },
     { title: 'Variables', items: [...vars].map(name => ({ ref: `vars.${name}`, description: 'Set by a step' })) },
@@ -96,6 +97,17 @@ const sections = computed(() => {
             { ref: 'loop.iteration', description: 'Iteration, from 1' },
             { ref: 'loop.item', description: 'Current item (for each)' },
             { ref: 'loop.total', description: 'Number of iterations, when known' }
+          ]
+        }]
+      : []),
+    ...(hasParallel
+      ? [{
+          title: 'Parallel branch',
+          items: [
+            { ref: 'branch.name', description: 'The branch’s name' },
+            { ref: 'branch.item', description: 'Its item (for each item)' },
+            { ref: 'branch.index', description: 'Its position, from 0' },
+            { ref: 'branch.total', description: 'Number of branches' }
           ]
         }]
       : []),

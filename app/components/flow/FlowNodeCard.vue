@@ -216,6 +216,12 @@ const summary = computed(() => {
       if (current.mode === 'count') return `Repeat ${current.count} time${current.count === 1 ? '' : 's'}`
       if (current.mode === 'forEach') return `For each item in ${current.items || '…'}`
       return `While ${current.condition || '…'} (at most ${current.max})`
+    case 'parallel': {
+      if (current.mode === 'map') return `Each item in ${current.items || '…'}, up to ${current.concurrency} at a time`
+      const count = current.branches.length
+      return `${count} branch${count === 1 ? '' : 'es'}${count > current.concurrency ? `, up to ${current.concurrency} at a time` : ' at the same time'}`
+    }
+    case 'join': return `${current.wait === 'first' ? 'Takes the first branch to finish' : 'Waits for every branch'}${current.keepConversation ? ' and keeps their messages' : ''}`
     case 'set': return current.assignments.filter(a => a.name).map(a => `${a.name} = ${a.expression}`).join('\n') || 'No variables yet'
     case 'ask': return previewText(current.prompt) || 'Asks for input'
     case 'end': return `Result: ${current.output || '{{last}}'}`

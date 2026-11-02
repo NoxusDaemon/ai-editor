@@ -283,6 +283,7 @@ const props = defineProps<{
 }>()
 
 const workspace = useWorkspaceStore()
+const flowRun = useFlowRunStore()
 
 const expanded = ref<string | null>(null)
 const importing = ref(false)
@@ -344,7 +345,8 @@ async function test() {
       topK: props.node.topK,
       minScore: props.node.minScore,
       diversify: props.node.diversify,
-      embed: texts => useServices().llm.embed(model, texts)
+      // Shares the vectors runs use, so testing again or running afterwards doesn't embed the documents again.
+      embed: texts => flowRun.embed(model, texts)
     })
   } catch (error) {
     testHits.value = null

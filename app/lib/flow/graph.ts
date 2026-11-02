@@ -13,7 +13,9 @@ import {
   type FlowEdge,
   type FlowNode,
   type GroupNode,
+  type JoinNode,
   type NodeKind,
+  type ParallelNode,
   type Position,
   type SegmentNode
 } from './types'
@@ -30,7 +32,7 @@ export interface OutputHandle {
 }
 
 /** Kinds that are steps of a run (have a flow input). */
-const FLOW_STEP_KINDS: ReadonlySet<NodeKind> = new Set(['segment', 'condition', 'loop', 'set', 'ask', 'end'])
+const FLOW_STEP_KINDS: ReadonlySet<NodeKind> = new Set(['segment', 'condition', 'loop', 'set', 'ask', 'parallel', 'join', 'end'])
 
 export const hasFlowInput = (node: FlowNode): boolean => FLOW_STEP_KINDS.has(node.kind)
 export const acceptsContext = (node: FlowNode): boolean => node.kind === 'segment' || node.kind === 'group'
@@ -52,12 +54,83 @@ export function outputHandles(node: FlowNode): OutputHandle[] {
       ]
     case 'loop':
       return [{ id: 'body', label: 'Each time' }, { id: 'done', label: 'Done' }]
+    case 'parallel':
+      return node.mode === 'map'
+        ? [{ id: 'each', label: 'Each item' }]
+        : node.branches.map((branch, i) => ({ id: branch.id, label: branchLabel(branch, i) }))
+    case 'join':
+      return [{ id: 'out', label: '' }, { id: 'error', label: 'If a branch fails' }]
     case 'memory':
     case 'knowledge':
       return [{ id: CONTEXT_HANDLE, label: '' }]
     default:
       return []
   }
+}
+
+export const branchLabel = (branch: { label: string }, index: number): string => branch.label.trim() || `Branch ${index + 1}`
+
+/** Names of a Parallel node's branches as keys of the Join's output: "Critic A" → "critic_a". Unique. */
+export function branchNames(node: ParallelNode): string[] {
+  const names: string[] = []
+  node.branches.forEach((branch, i) => names.push(uniqueKey(branch.label.trim() ? keyFromTitle(branch.label) : `branch${i + 1}`, names)))
+  return names
+}
+
+export interface BranchPaths {
+  /** Join nodes the branches lead to (outside any nested Parallel). */
+  joins: JoinNode[]
+  /** End nodes a branch can reach before a Join. */
+  ends: FlowNode[]
+}
+
+/** Nesting deeper than this is treated as a mistake (a branch leading back into its own Parallel). */
+const MAX_PARALLEL_DEPTH = 16
+
+/**
+ * Where a Parallel node's branches lead: the Join(s) they meet at, skipping the
+ * joins of nested Parallel nodes, and any End reached on the way.
+ */
+export function branchPaths(flow: Flow, parallel: ParallelNode): BranchPaths {
+  const joins = new Set<JoinNode>()
+  const ends = new Set<FlowNode>()
+  const seen = new Set<string>()
+  const queue: [string, number][] = outputHandles(parallel)
+    .map(handle => nextEdge(flow, parallel.id, handle.id))
+    .filter((edge): edge is FlowEdge => !!edge)
+    .map(edge => [edge.target, 0])
+  while (queue.length) {
+    const [id, depth] = queue.pop()!
+    const state = `${id}\u0000${depth}`
+    const node = findNode(flow, id)
+    if (!node || seen.has(state)) continue
+    seen.add(state)
+    let next = depth
+    if (node.kind === 'join') {
+      if (depth === 0) {
+        joins.add(node)
+        continue
+      }
+      next = depth - 1
+    } else if (node.kind === 'end') {
+      if (depth === 0) ends.add(node)
+      continue
+    } else if (node.kind === 'parallel') {
+      if (node.id === parallel.id || depth >= MAX_PARALLEL_DEPTH) continue
+      next = depth + 1
+    }
+    for (const handle of outputHandles(node)) {
+      const edge = nextEdge(flow, node.id, handle.id)
+      if (edge) queue.push([edge.target, next])
+    }
+  }
+  return { joins: [...joins], ends: [...ends] }
+}
+
+/** The Join a Parallel node's branches meet at, if there is exactly one. */
+export function joinOf(flow: Flow, parallel: ParallelNode): JoinNode | undefined {
+  const { joins } = branchPaths(flow, parallel)
+  return joins.length === 1 ? joins[0] : undefined
 }
 
 export const findNode = (flow: Flow, id: string | null | undefined): FlowNode | undefined =>
@@ -236,7 +309,7 @@ export function cloneFlow(flow: Flow): Flow {
   return { settings: { ...flow.settings }, nodes, edges }
 }
 
-/** Drops edges that no longer fit the nodes (removed nodes or condition branches, wrong kinds). */
+/** Drops edges that no longer fit the nodes (removed nodes, condition or parallel branches, wrong kinds). */
 export function pruneEdges(flow: Flow): FlowEdge[] {
   const used = new Set<string>()
   const kept: FlowEdge[] = []

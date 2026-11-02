@@ -102,7 +102,10 @@
         v-if="node.kind !== 'note' && node.kind !== 'group'"
         :flow="flow"
       />
-      <UDropdownMenu :items="menu">
+      <UDropdownMenu
+        v-if="menu.length"
+        :items="menu"
+      >
         <UButton
           icon="i-lucide-ellipsis"
           color="neutral"
@@ -131,6 +134,16 @@
       />
       <FlowSetEditor
         v-else-if="node.kind === 'set'"
+        :session-id="sessionId"
+        :node="node"
+      />
+      <FlowParallelEditor
+        v-else-if="node.kind === 'parallel'"
+        :session-id="sessionId"
+        :node="node"
+      />
+      <FlowJoinEditor
+        v-else-if="node.kind === 'join'"
         :session-id="sessionId"
         :node="node"
       />
@@ -222,20 +235,19 @@ function commitKey() {
   }
 }
 
-const menu = computed<DropdownMenuItem[][]>(() => [
-  [
-    {
-      label: 'Duplicate',
-      icon: 'i-lucide-copy',
-      onSelect: () => {
-        const [copy] = workspace.duplicateNodes(props.sessionId, [props.node.id])
-        if (copy) emit('open', copy.id)
-      }
-    }
-  ],
-  ...(props.node.kind === 'start'
-    ? []
-    : [[{
+// A flow has exactly one Start: it can't be copied or deleted.
+const menu = computed<DropdownMenuItem[][]>(() => props.node.kind === 'start'
+  ? []
+  : [
+      [{
+        label: 'Duplicate',
+        icon: 'i-lucide-copy',
+        onSelect: () => {
+          const [copy] = workspace.duplicateNodes(props.sessionId, [props.node.id])
+          if (copy) emit('open', copy.id)
+        }
+      }],
+      [{
         label: props.node.kind === 'group' ? 'Delete with contents' : 'Delete',
         icon: 'i-lucide-trash-2',
         color: 'error' as const,
@@ -243,6 +255,6 @@ const menu = computed<DropdownMenuItem[][]>(() => [
           emit('close')
           workspace.removeNodes(props.sessionId, [props.node.id])
         }
-      }]])
-])
+      }]
+    ])
 </script>

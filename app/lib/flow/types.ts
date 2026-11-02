@@ -2,8 +2,10 @@
  * Flow model: a session's conversation is designed as a graph of nodes that a
  * run walks from Start, one node at a time, like a state machine.
  *
- * - Flow nodes (start, segment, condition, loop, set, ask, end) are connected by
- *   flow edges: one edge per output handle, so every transition is unambiguous.
+ * - Flow nodes (start, segment, condition, loop, set, ask, parallel, join, end)
+ *   are connected by flow edges: one edge per output handle, so every transition
+ *   is unambiguous. A Parallel node runs several paths at once, each on its own
+ *   copy of the conversation and variables, and they meet again at a Join.
  * - Context nodes (memory, knowledge) are not steps. They feed segments, either
  *   through a context edge or by sitting inside a group with them.
  * - Groups contain nodes and pass their settings (model, system prompt, context,
@@ -18,7 +20,7 @@ export interface Position {
   y: number
 }
 
-export const NODE_KINDS = ['start', 'segment', 'condition', 'loop', 'set', 'ask', 'end', 'memory', 'knowledge', 'group', 'note'] as const
+export const NODE_KINDS = ['start', 'segment', 'condition', 'loop', 'set', 'ask', 'parallel', 'join', 'end', 'memory', 'knowledge', 'group', 'note'] as const
 export type NodeKind = (typeof NODE_KINDS)[number]
 
 /** How much of the conversation so far a segment sees. */
@@ -127,6 +129,42 @@ export interface AskNode extends NodeBase {
   addToConversation: boolean
 }
 
+export const PARALLEL_MODES = ['branches', 'map'] as const
+export type ParallelMode = (typeof PARALLEL_MODES)[number]
+
+export interface ParallelBranch {
+  /** Also the id of the branch's output handle. */
+  id: string
+  label: string
+}
+
+/**
+ * Runs several paths at the same time. Each starts from a copy of the
+ * conversation and variables; they meet again at a Join node.
+ */
+export interface ParallelNode extends NodeBase {
+  kind: 'parallel'
+  /** branches: one output per branch. map: the "Each item" path runs once per item of a list. */
+  mode: ParallelMode
+  branches: ParallelBranch[]
+  /** `map`: an expression giving the list; each run sees its item as `branch.item`. */
+  items: string
+  /** Most branches running at once. */
+  concurrency: number
+}
+
+export const JOIN_WAITS = ['all', 'first'] as const
+export type JoinWait = (typeof JOIN_WAITS)[number]
+
+/** Where the branches of a Parallel node meet again. Its output collects theirs. */
+export interface JoinNode extends NodeBase {
+  kind: 'join'
+  /** all: wait for every branch. first: take the first branch to finish and stop the others. */
+  wait: JoinWait
+  /** Add the messages the branches added to the conversation, in branch order. */
+  keepConversation: boolean
+}
+
 export interface EndNode extends NodeBase {
   kind: 'end'
   /** The run's result. A single `{{expression}}` keeps its value as is (e.g. an object). */
@@ -209,6 +247,8 @@ export type FlowNode
     | LoopNode
     | SetNode
     | AskNode
+    | ParallelNode
+    | JoinNode
     | EndNode
     | MemoryNode
     | KnowledgeNode
@@ -221,7 +261,7 @@ export type ContextNode = MemoryNode | KnowledgeNode
 export interface FlowEdge {
   id: string
   source: string
-  /** Output handle on the source: `out`, a branch id, `body`, `ctx`, … */
+  /** Output handle on the source: `out`, a condition or parallel branch id, `body`, `ctx`, … */
   sourceHandle: string
   target: string
 }
@@ -250,6 +290,8 @@ export const DEFAULT_TITLES: Record<NodeKind, string> = {
   loop: 'Loop',
   set: 'Set variables',
   ask: 'Ask user',
+  parallel: 'Parallel',
+  join: 'Join',
   end: 'End',
   memory: 'Memory',
   knowledge: 'Knowledge',
@@ -295,6 +337,13 @@ const DEFAULTS: NodeDefaults = {
   loop: () => ({ mode: 'count', count: 3, condition: '', items: '', max: 10 }),
   set: () => ({ assignments: [{ id: createId(), name: '', expression: '' }] }),
   ask: () => ({ prompt: '', saveAs: 'answer', addToConversation: true }),
+  parallel: () => ({
+    mode: 'branches',
+    branches: [{ id: createId(), label: 'Branch 1' }, { id: createId(), label: 'Branch 2' }],
+    items: '',
+    concurrency: 4
+  }),
+  join: () => ({ wait: 'all', keepConversation: false }),
   end: () => ({ output: '{{last}}' }),
   memory: () => ({
     memory: 'notes',

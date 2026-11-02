@@ -1,6 +1,7 @@
 /**
  * Starter flows, one per common pattern: a single reply, a chat loop with
- * memory, retrieval (RAG), routing, critique-and-revise, and extraction.
+ * memory, retrieval (RAG), routing, critique-and-revise, parallel fan-out,
+ * map-reduce, and extraction.
  */
 import { createBlock, createId, type Block } from '../blocks'
 import { createEdge, createFlowSettings, createNode, type Flow, type FlowNode, type FlowSettings, type NodeOf } from './types'
@@ -213,6 +214,85 @@ function reflectionFlow(): Flow {
   ])
 }
 
+function perspectivesFlow(): Flow {
+  const start = createNode('start', { key: 'start', position: at(0, 180), input: 'Should a small team switch to a four-day working week?' })
+  const fanOut = createNode('parallel', {
+    key: 'ask_three_ways',
+    title: 'Ask three ways',
+    position: at(300, 180),
+    branches: [{ id: createId(), label: 'Optimist' }, { id: createId(), label: 'Skeptic' }, { id: createId(), label: 'Pragmatist' }]
+  })
+  const panel = createNode('group', {
+    key: 'panel',
+    title: 'Panel',
+    position: at(620, -20),
+    width: 360,
+    height: 520,
+    context: 'isolated',
+    ephemeral: true,
+    system: 'Give your view in at most four sentences.'
+  })
+  const view = (key: string, title: string, y: number, stance: string) =>
+    segment(key, title, 50, y, [system(stance), user('{{input}}')], { parentId: panel.id })
+  const optimist = view('optimist', 'Optimist', 60, 'You see the opportunities in any change.')
+  const skeptic = view('skeptic', 'Skeptic', 220, 'You look for the risks and hidden costs in any change.')
+  const pragmatist = view('pragmatist', 'Pragmatist', 380, 'You care about what it would take to make a change work in practice.')
+  const views = createNode('join', { key: 'views', title: 'Views', position: at(1060, 180) })
+  const weigh = segment('weigh', 'Weigh them up', 1360, 180, [
+    user('Question: {{input}}\n\nOptimist: {{nodes.views.output.optimist}}\n\nSkeptic: {{nodes.views.output.skeptic}}\n\nPragmatist: {{nodes.views.output.pragmatist}}\n\nWeigh these views and give a balanced recommendation.')
+  ])
+  const end = createNode('end', { key: 'end', position: at(1700, 180) })
+  const tip = createNode('note', {
+    key: 'tip',
+    position: at(300, 400),
+    text: 'The three branches run at the same time, each on its own copy of the conversation. The Join collects their replies by branch name.'
+  })
+  return flowOf([start, fanOut, panel, optimist, skeptic, pragmatist, views, weigh, end, tip], [
+    [start, 'out', fanOut],
+    [fanOut, fanOut.branches[0]!.id, optimist],
+    [fanOut, fanOut.branches[1]!.id, skeptic],
+    [fanOut, fanOut.branches[2]!.id, pragmatist],
+    [optimist, 'out', views],
+    [skeptic, 'out', views],
+    [pragmatist, 'out', views],
+    [views, 'out', weigh],
+    [weigh, 'out', end]
+  ])
+}
+
+const SAMPLE_BEES = `Honeybees live in colonies of tens of thousands. A single queen lays the eggs, while the workers gather food, build comb and defend the hive.
+
+Foragers tell each other where they found flowers with the waggle dance: its angle gives the direction relative to the sun, and its length the distance.
+
+In winter the colony clusters around the queen and shivers its flight muscles to keep the centre warm, living on the honey stored over the summer.`
+
+function mapReduceFlow(): Flow {
+  const start = createNode('start', { key: 'start', position: at(0, 100), input: SAMPLE_BEES })
+  const split = createNode('set', {
+    key: 'split',
+    title: 'Split into parts',
+    position: at(300, 100),
+    assignments: [{ id: createId(), name: 'parts', expression: 'split(trim(input), "\\n\\n")' }]
+  })
+  const each = createNode('parallel', { key: 'each_part', title: 'Each part', position: at(600, 100), mode: 'map', items: 'vars.parts' })
+  const summarise = segment('summarise', 'Summarise a part', 900, 100, [
+    user('Summarise part {{branch.index + 1}} of {{branch.total}} in one sentence:\n\n{{branch.item}}')
+  ], { context: 'isolated', ephemeral: true, temperature: 0 })
+  const summaries = createNode('join', { key: 'summaries', title: 'Summaries', position: at(1220, 100) })
+  const combine = segment('combine', 'Combine', 1520, 100, [
+    user('Combine these summaries into one short paragraph:\n\n{{join(nodes.summaries.output, " ")}}')
+  ])
+  const end = createNode('end', { key: 'end', position: at(1860, 100) })
+  return flowOf([start, split, each, summarise, summaries, combine, end], [
+    [start, 'out', split],
+    [split, 'out', each],
+    [each, 'each', summarise],
+    [summarise, 'out', summaries],
+    [summaries, 'out', combine],
+    [combine, 'out', end]
+  ])
+}
+
 function extractionFlow(): Flow {
   const start = createNode('start', {
     key: 'start',
@@ -257,5 +337,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
   { id: 'rag', title: 'Knowledge Q&A (RAG)', description: 'Rewrite the question, retrieve passages, answer with citations', icon: 'i-lucide-library', create: ragFlow },
   { id: 'router', title: 'Router', description: 'Classify with a schema, then branch to specialised segments', icon: 'i-lucide-split', create: routerFlow },
   { id: 'reflection', title: 'Draft, critique, revise', description: 'A loop that improves a draft until a reviewer is satisfied', icon: 'i-lucide-repeat', create: reflectionFlow },
+  { id: 'perspectives', title: 'Several perspectives', description: 'Ask three ways at the same time, then weigh up the answers', icon: 'i-lucide-git-fork', create: perspectivesFlow },
+  { id: 'map', title: 'Summarise in parts', description: 'Split a text, summarise every part at the same time, then combine', icon: 'i-lucide-git-merge', create: mapReduceFlow },
   { id: 'extraction', title: 'Structured extraction', description: 'Pull JSON matching a schema out of free text', icon: 'i-lucide-braces', create: extractionFlow }
 ]

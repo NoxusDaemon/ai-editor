@@ -48,6 +48,8 @@ import {
 import { useSettingsStore } from './settings'
 
 export const HISTORY_LIMIT = 50
+/** Undo snapshots kept per session at most, in characters: flows with large knowledge documents keep fewer steps. */
+export const HISTORY_MAX_CHARS = 40_000_000
 /** Edits to the same thing within this long of each other are undone together, e.g. a burst of typing. */
 export const HISTORY_COALESCE_MS = 1500
 const GROUP_PADDING = 40
@@ -113,7 +115,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     history.lastAt = now
     if (merge) return
     history.past.push(JSON.stringify(flow))
-    if (history.past.length > HISTORY_LIMIT) history.past.shift()
+    let size = history.past.reduce((total, snapshot) => total + snapshot.length, 0)
+    while (history.past.length > HISTORY_LIMIT || (size > HISTORY_MAX_CHARS && history.past.length > 1)) size -= history.past.shift()!.length
     history.future = []
     historyVersion.value++
   }
@@ -270,8 +273,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (!flow || !node) return
     checkpoint(sessionId, `node:${nodeId}:${Object.keys(patch).sort().join(',')}`)
     Object.assign(node, patch)
-    // Removing a condition branch removes the edge from its handle.
-    if ('branches' in patch) flow.edges = pruneEdges(flow)
+    // Removing a branch, or switching a Parallel node's mode, removes the edges from handles that are gone.
+    if ('branches' in patch || 'mode' in patch) flow.edges = pruneEdges(flow)
     if ('memory' in patch && node.kind === 'memory' && node.memory !== 'store') {
       for (const other of flow.nodes) {
         if (other.kind === 'segment') other.memoryWrites = other.memoryWrites.filter(id => id !== nodeId)
@@ -340,6 +343,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const flow = findFlow(sessionId)
     const group = findNode(sessionId, groupId, 'group')
     if (!flow || !group) return
+    const unchanged = Math.round(box.x) === group.position.x && Math.round(box.y) === group.position.y
+      && Math.round(box.width) === group.width && Math.round(box.height) === group.height
+    if (unchanged) return
     checkpoint(sessionId)
     const dx = Math.round(box.x - group.position.x)
     const dy = Math.round(box.y - group.position.y)
@@ -353,7 +359,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  /** Removes nodes; removing a group removes everything inside it. */
+  /**
+   * Removes nodes; removing a group removes everything inside it. The Start
+   * node stays (it can't be added back from the palette), moved out of any
+   * group being removed.
+   */
   function removeNodes(sessionId: string, ids: readonly string[]) {
     const flow = findFlow(sessionId)
     if (!flow || !ids.length) return
@@ -361,8 +371,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     for (const id of ids) {
       if (findFlowNode(flow, id)?.kind === 'group') descendants(flow, id).forEach(node => doomed.add(node.id))
     }
+    const starts = flow.nodes.filter(node => node.kind === 'start' && doomed.has(node.id))
+    starts.forEach(node => doomed.delete(node.id))
     if (!flow.nodes.some(node => doomed.has(node.id))) return
     checkpoint(sessionId)
+    for (const start of starts) {
+      if (ancestors(flow, start).some(group => doomed.has(group.id))) reparent(flow, start, null)
+    }
     flow.nodes = flow.nodes.filter(node => !doomed.has(node.id))
     flow.edges = flow.edges.filter(edge => !doomed.has(edge.source) && !doomed.has(edge.target))
     for (const node of flow.nodes) {
@@ -421,7 +436,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     for (const id of ids) {
       if (findFlowNode(flow, id)?.kind === 'group') descendants(flow, id).forEach(node => chosen.add(node.id))
     }
-    const originals = flow.nodes.filter(node => chosen.has(node.id))
+    // A flow has one Start.
+    const originals = flow.nodes.filter(node => chosen.has(node.id) && node.kind !== 'start')
     if (!originals.length) return []
     checkpoint(sessionId)
     const { nodes, edges } = copyNodes(flow, originals, flow.nodes.map(n => n.key))

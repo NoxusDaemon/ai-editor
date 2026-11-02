@@ -30,7 +30,17 @@ export default defineNuxtPlugin(() => {
     dialogs: {
       askPassword: async request => (await passwordModal.open(request).result) ?? null,
       confirm: async request => (await confirmModal.open(request).result) ?? false,
-      prompt: async request => (await promptModal.open(request).result) ?? null,
+      prompt: async ({ signal, ...request }) => {
+        if (signal?.aborted) return null
+        const opened = promptModal.open(request)
+        const close = () => promptModal.close(null)
+        signal?.addEventListener('abort', close, { once: true })
+        try {
+          return (await opened.result) ?? null
+        } finally {
+          signal?.removeEventListener('abort', close)
+        }
+      },
       notify: ({ color = 'info', ...notice }) => toast.add({ ...notice, color, icon: NOTICE_ICONS[color] })
     },
     clipboard: createClipboard()

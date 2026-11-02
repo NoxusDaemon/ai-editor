@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createBlock, type ChatMessage } from '~/lib/blocks'
-import { normalizeMessages, runFlow, type GenerateCall, type RunDeps, type RunEvent } from '~/lib/flow/engine'
+import { createBlock, type ChatMessage, type GenerateStats } from '~/lib/blocks'
+import { normalizeMessages, runFlow, type AskRequest, type GenerateCall, type RunDeps, type RunEvent } from '~/lib/flow/engine'
 import { FLOW_TEMPLATES } from '~/lib/flow/templates'
-import { createEdge, createFlowSettings, createNode, type Flow, type FlowNode } from '~/lib/flow/types'
+import { createEdge, createFlowSettings, createNode, type Flow, type FlowNode, type JoinNode, type ParallelNode } from '~/lib/flow/types'
 
 type Reply = string | ((call: GenerateCall) => string)
 
@@ -268,7 +268,7 @@ describe('runFlow', () => {
     const model = scriptedModel()
 
     const result = await run(flow, { ...model, ask })
-    expect(ask).toHaveBeenCalledWith({ nodeId: question.id, title: 'Ask user', prompt: 'Your name? (input was hi)' })
+    expect(ask).toHaveBeenCalledWith({ nodeId: question.id, title: 'Ask user', prompt: 'Your name? (input was hi)', signal: expect.any(AbortSignal) })
     expect(result.vars.name).toBe('Grace')
     expect(roles(model.calls[0]!.messages)).toEqual(['user: Grace\n\nGreet them'])
 
@@ -322,6 +322,296 @@ describe('runFlow', () => {
       const result = await run(template.create(), { ...model, ask: async () => answers++ ? 'bye' : 'My name is Ada' })
       expect([template.id, result.status, result.error]).toEqual([template.id, 'done', undefined])
     }
+  })
+})
+
+/** A model whose replies are released by hand, to control which branch finishes first. */
+function heldModel() {
+  const held: { call: GenerateCall, reply: (text: string) => void }[] = []
+  const generate = vi.fn((call: GenerateCall) => new Promise<GenerateStats>((resolve, reject) => {
+    call.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+    held.push({
+      call,
+      reply: (text) => {
+        call.onText(text)
+        resolve({ stopReason: 'eosFound' })
+      }
+    })
+  }))
+  /** The held call whose last message mentions `text`. */
+  const find = (text: string) => held.find(h => h.call.messages.at(-1)!.content.includes(text))!
+  return { generate, held, find }
+}
+
+const settle = () => new Promise(resolve => setTimeout(resolve, 0))
+
+const parallel = (init: Partial<ParallelNode> = {}) => createNode('parallel', { key: 'fan', ...init })
+const join = (init: Partial<JoinNode> = {}) => createNode('join', { key: 'meet', ...init })
+const set = (key: string, name: string, expression: string) =>
+  createNode('set', { key, assignments: [{ id: key, name, expression }] })
+
+describe('runFlow: parallel branches', () => {
+  it('runs branches at the same time and collects their outputs by name, in branch order', async () => {
+    const s = start()
+    const fan = parallel({ branches: [{ id: 'a', label: 'Critic A' }, { id: 'b', label: 'Critic B' }] })
+    const a = segment('a', 'Review as A')
+    const b = segment('b', 'Review as B')
+    const meet = join()
+    const e = end()
+    const flow = flowOf([s, fan, a, b, meet, e], [[s, 'out', fan], [fan, 'a', a], [fan, 'b', b], [a, 'out', meet], [b, 'out', meet], [meet, 'out', e]])
+    const model = heldModel()
+
+    const running = run(flow, model)
+    await settle()
+    expect(model.held).toHaveLength(2)
+    model.find('as B').reply('B is fine')
+    await settle()
+    model.find('as A').reply('A has notes')
+    const result = await running
+
+    expect(result.status).toBe('done')
+    expect(result.output).toEqual({ critic_a: 'A has notes', critic_b: 'B is fine' })
+    expect(Object.keys(result.output as object)).toEqual(['critic_a', 'critic_b'])
+    expect(result.steps.map(step => [step.title, step.branch])).toEqual([
+      ['Start', undefined],
+      ['Parallel', undefined],
+      ['Segment', 'Critic A'],
+      ['Segment', 'Critic B'],
+      ['Join', undefined],
+      ['End', undefined]
+    ])
+    expect(result.steps.find(step => step.kind === 'join')!.via).toHaveLength(2)
+    expect(result.transcript).toEqual([])
+  })
+
+  it('gives each branch its own copy of the run, merged in branch order whichever finishes first', async () => {
+    const s = start()
+    const fan = parallel({ branches: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] })
+    const a1 = segment('a1', 'First in A')
+    const a2 = segment('a2', 'Second in A')
+    const setA = set('set_a', 'winner', '"a"')
+    const b1 = segment('b1', 'Only in B')
+    const setB = set('set_b', 'winner', '"b"')
+    const meet = join({ keepConversation: true })
+    const e = end('{{vars.winner}}')
+    const flow = flowOf([s, fan, a1, a2, setA, b1, setB, meet, e], [
+      [s, 'out', fan],
+      [fan, 'a', a1],
+      [a1, 'out', a2],
+      [a2, 'out', setA],
+      [setA, 'out', meet],
+      [fan, 'b', b1],
+      [b1, 'out', setB],
+      [setB, 'out', meet],
+      [meet, 'out', e]
+    ])
+    const model = heldModel()
+
+    const running = run(flow, model)
+    await settle()
+    model.find('First in A').reply('a1 done')
+    await settle()
+    // A's second segment sees A's conversation, never B's.
+    expect(roles(model.find('Second in A').call.messages)).toEqual(['user: First in A', 'assistant: a1 done', 'user: Second in A'])
+    model.find('Second in A').reply('a2 done')
+    await settle()
+    // B finishes last, and comes last in branch order too, so its variable wins.
+    model.find('Only in B').reply('b1 done')
+    const result = await running
+
+    expect(result.output).toBe('b')
+    expect(result.transcript.map(m => m.content)).toEqual(['First in A', 'a1 done', 'Second in A', 'a2 done', 'Only in B', 'b1 done'])
+    expect(result.nodes.a2).toMatchObject({ output: 'a2 done', visits: 1 })
+  })
+
+  it('merges in branch order even when the last branch finishes first', async () => {
+    const s = start()
+    const fan = parallel({ branches: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] })
+    const slow = segment('slow', 'Slow')
+    const setA = set('set_a', 'winner', '"a"')
+    const setB = set('set_b', 'winner', '"b"')
+    const meet = join()
+    const e = end('{{vars.winner}}')
+    const flow = flowOf([s, fan, slow, setA, setB, meet, e], [
+      [s, 'out', fan],
+      [fan, 'a', slow],
+      [slow, 'out', setA],
+      [setA, 'out', meet],
+      [fan, 'b', setB],
+      [setB, 'out', meet],
+      [meet, 'out', e]
+    ])
+    const model = heldModel()
+
+    const running = run(flow, model)
+    await settle()
+    model.find('Slow').reply('done at last')
+    const result = await running
+
+    expect(result.output).toBe('b')
+  })
+
+  it('runs a path for each item, at most `concurrency` at a time, keeping item order', async () => {
+    const s = start()
+    const fan = parallel({ mode: 'map', items: 'split(input)', concurrency: 2 })
+    const each = segment('each', 'Describe {{branch.item}} ({{branch.index + 1}} of {{branch.total}})')
+    const meet = join()
+    const flow = flowOf([s, fan, each, meet], [[s, 'out', fan], [fan, 'each', each], [each, 'out', meet]])
+    const model = heldModel()
+
+    const running = run(flow, model, 'red, green, blue')
+    await settle()
+    expect(model.held.map(h => h.call.messages.at(-1)!.content)).toEqual(['Describe red (1 of 3)', 'Describe green (2 of 3)'])
+    model.find('green').reply('Grass')
+    await settle()
+    expect(model.held).toHaveLength(3)
+    model.find('blue').reply('Sky')
+    model.find('red').reply('Fire')
+    const result = await running
+
+    expect(result.output).toEqual(['Fire', 'Grass', 'Sky'])
+    expect(result.nodes.each!.visits).toBe(3)
+    expect(result.steps.filter(step => step.kind === 'segment').map(step => step.branch)).toEqual(['Item 1', 'Item 2', 'Item 3'])
+  })
+
+  it('goes straight to the Join when there are no items', async () => {
+    const s = start()
+    const fan = parallel({ mode: 'map', items: '[]' })
+    const each = segment('each', 'Never')
+    const meet = join()
+    const model = scriptedModel()
+    const result = await run(flowOf([s, fan, each, meet], [[s, 'out', fan], [fan, 'each', each], [each, 'out', meet]]), model)
+
+    expect(result).toMatchObject({ status: 'done', output: [] })
+    expect(model.generate).not.toHaveBeenCalled()
+  })
+
+  it('can take the first branch to finish and stop the others', async () => {
+    const s = start()
+    const fan = parallel({ branches: [{ id: 'a', label: 'Slow' }, { id: 'b', label: 'Fast' }] })
+    const a = segment('a', 'Think slowly')
+    const b = segment('b', 'Think fast')
+    const meet = join({ wait: 'first' })
+    const flow = flowOf([s, fan, a, b, meet], [[s, 'out', fan], [fan, 'a', a], [fan, 'b', b], [a, 'out', meet], [b, 'out', meet]])
+    const model = heldModel()
+
+    const running = run(flow, model)
+    await settle()
+    model.find('fast').reply('Quick answer')
+    const result = await running
+
+    expect(result).toMatchObject({ status: 'done', output: 'Quick answer' })
+    expect(result.steps.find(step => step.nodeId === a.id)!.status).toBe('stopped')
+    expect(result.steps.find(step => step.kind === 'join')!.detail).toBe('“Fast” finished first')
+  })
+
+  it('stops the other branches when one fails, and takes the Join’s failure path if connected', async () => {
+    const s = start()
+    const fan = parallel({ branches: [{ id: 'a', label: 'Good' }, { id: 'b', label: 'Bad' }] })
+    const a = segment('a', 'Be good')
+    const b = segment('b', 'Be bad')
+    const meet = join()
+    const recover = createNode('end', { key: 'recover', output: 'Recovered from {{error}}' })
+    const links: [FlowNode, string, FlowNode][] = [[s, 'out', fan], [fan, 'a', a], [fan, 'b', b], [a, 'out', meet], [b, 'out', meet]]
+    const generate = vi.fn(async (call: GenerateCall): Promise<GenerateStats> => {
+      if (call.messages.at(-1)!.content === 'Be bad') {
+        await settle()
+        throw new Error('model crashed')
+      }
+      return new Promise((_, reject) => call.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))))
+    })
+
+    const failed = await run(flowOf([s, fan, a, b, meet], links), { generate })
+    expect(failed).toMatchObject({ status: 'error', error: 'Bad: model crashed' })
+    expect(failed.steps.find(step => step.nodeId === a.id)!.status).toBe('stopped')
+    expect(failed.steps.find(step => step.nodeId === b.id)).toMatchObject({ status: 'error', error: 'model crashed' })
+
+    const recovered = await run(flowOf([s, fan, a, b, meet, recover], [...links, [meet, 'error', recover]]), { generate })
+    expect(recovered).toMatchObject({ status: 'done', output: 'Recovered from Bad: model crashed' })
+    expect(recovered.steps.find(step => step.kind === 'join')).toMatchObject({ status: 'error', handle: 'error' })
+  })
+
+  it('runs nested Parallel nodes, each meeting at its own Join', async () => {
+    const s = start()
+    const outer = parallel({ key: 'outer', mode: 'map', items: '["x", "y"]' })
+    const keep = set('keep', 'item', 'branch.item')
+    const inner = parallel({ key: 'inner', branches: [{ id: 'up', label: 'Up' }, { id: 'down', label: 'Down' }] })
+    const up = set('up_set', 'v', 'upper(vars.item)')
+    const down = set('down_set', 'v', 'vars.item + "!"')
+    const innerJoin = join({ key: 'inner_join' })
+    const outerJoin = join({ key: 'outer_join' })
+    const flow = flowOf([s, outer, keep, inner, up, down, innerJoin, outerJoin], [
+      [s, 'out', outer],
+      [outer, 'each', keep],
+      [keep, 'out', inner],
+      [inner, 'up', up],
+      [up, 'out', innerJoin],
+      [inner, 'down', down],
+      [down, 'out', innerJoin],
+      [innerJoin, 'out', outerJoin]
+    ])
+
+    const result = await run(flow, scriptedModel())
+
+    expect(result.status).toBe('done')
+    expect(result.output).toEqual([{ up: { v: 'X' }, down: { v: 'x!' } }, { up: { v: 'Y' }, down: { v: 'y!' } }])
+    expect(result.steps.find(step => step.nodeId === down.id)!.branch).toBe('Item 1 › Down')
+  })
+
+  it('asks one question at a time', async () => {
+    const s = start()
+    const fan = parallel({ branches: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] })
+    const qa = createNode('ask', { key: 'qa', prompt: 'First?' })
+    const qb = createNode('ask', { key: 'qb', prompt: 'Second?' })
+    const meet = join()
+    const flow = flowOf([s, fan, qa, qb, meet], [[s, 'out', fan], [fan, 'a', qa], [fan, 'b', qb], [qa, 'out', meet], [qb, 'out', meet]])
+    let open = 0
+    let most = 0
+    const ask = vi.fn(async ({ prompt }: AskRequest) => {
+      most = Math.max(most, ++open)
+      await settle()
+      open--
+      return prompt.replace('?', '!')
+    })
+
+    const result = await run(flow, { ...scriptedModel(), ask })
+
+    expect(ask).toHaveBeenCalledTimes(2)
+    expect(most).toBe(1)
+    expect(result.output).toEqual({ a: 'First!', b: 'Second!' })
+  })
+
+  it('stops every branch when the run is stopped', async () => {
+    const controller = new AbortController()
+    const s = start()
+    const fan = parallel({ mode: 'map', items: '[1, 2, 3]' })
+    const each = segment('each', 'Item {{branch.item}}')
+    const meet = join()
+    const model = heldModel()
+
+    const running = run(flowOf([s, fan, each, meet], [[s, 'out', fan], [fan, 'each', each], [each, 'out', meet]]), model, 'x', controller.signal)
+    await settle()
+    controller.abort()
+    const result = await running
+
+    expect(result.status).toBe('stopped')
+    expect(result.steps.filter(step => step.kind === 'segment').map(step => step.status)).toEqual(['stopped', 'stopped', 'stopped'])
+  })
+
+  it('refuses to end the run inside a branch', async () => {
+    const s = start()
+    const fan = parallel({ branches: [{ id: 'a', label: 'A' }] })
+    const e = end()
+    const result = await run(flowOf([s, fan, e], [[s, 'out', fan], [fan, 'a', e]]), scriptedModel())
+    expect(result).toMatchObject({ status: 'error', error: expect.stringMatching(/Branches can't end the run/) })
+  })
+
+  it('passes the run on at a Join no Parallel node leads to', async () => {
+    const s = start()
+    const meet = join()
+    const e = end()
+    const result = await run(flowOf([s, meet, e], [[s, 'out', meet], [meet, 'out', e]]), scriptedModel(), 'hello')
+    expect(result).toMatchObject({ status: 'done', output: 'hello' })
   })
 })
 

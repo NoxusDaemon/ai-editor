@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FLOW_TEMPLATES } from '~/lib/flow/templates'
 import type { GenerateRequest } from '~/services/llm'
 import { useFlowRunStore } from '~/stores/flowRun'
@@ -45,8 +45,8 @@ describe('flow run store', () => {
   it('refuses to run a flow with errors, saying what is wrong', async () => {
     const { llm, dialogs, workspace, flowRun } = setup()
     const session = workspace.activeSession
-    const start = session.flow.nodes.find(n => n.kind === 'start')!
-    workspace.removeNodes(session.id, [start.id])
+    const segment = session.flow.nodes.find(n => n.kind === 'segment')!
+    workspace.updateNode(session.id, segment.id, { schema: '{ broken' })
 
     expect(await flowRun.run(session.id)).toBe(false)
 
@@ -87,6 +87,48 @@ describe('flow run store', () => {
     await running
 
     expect(flowRun.runs[session.id]!.status).toBe('stopped')
+  })
+
+  it('closes an open question when the run is stopped', async () => {
+    const { dialogs, workspace, flowRun } = setup()
+    const session = workspace.addSession(template('chat'))
+    dialogs.prompt.mockImplementation(({ signal }) => new Promise((resolve) => {
+      signal!.addEventListener('abort', () => resolve(null))
+    }))
+
+    const running = flowRun.run(session.id)
+    await vi.waitFor(() => expect(flowRun.runs[session.id]!.waitingNodeId).not.toBeNull())
+    flowRun.stop(session.id)
+    await running
+
+    expect(flowRun.runs[session.id]).toMatchObject({ status: 'stopped', waitingNodeId: null })
+  })
+
+  it('shows a node as running while any of its parallel branches is', async () => {
+    const { llm, workspace, flowRun } = setup()
+    const session = workspace.addSession(template('map'))
+    const release: (() => void)[] = []
+    llm.generate.mockImplementation(({ onText, messages }: GenerateRequest) => new Promise((resolve) => {
+      release.push(() => {
+        onText(`Summary of ${messages.at(-1)!.content.length} characters`)
+        resolve({ stopReason: 'eosFound' })
+      })
+    }))
+    const summarise = session.flow.nodes.find(n => n.key === 'summarise')!
+
+    const running = flowRun.run(session.id)
+    await vi.waitFor(() => expect(release).toHaveLength(3))
+    release[2]!()
+    await vi.waitFor(() => expect(flowRun.runs[session.id]!.steps.filter(s => s.status === 'done' && s.nodeId === summarise.id)).toHaveLength(1))
+    expect(flowRun.nodeStates(session.id).get(summarise.id)).toMatchObject({ status: 'running', visits: 3 })
+
+    release[0]!()
+    release[1]!()
+    await vi.waitFor(() => expect(release).toHaveLength(4))
+    release[3]!()
+    await running
+    expect(flowRun.runs[session.id]!.status).toBe('done')
+    expect(flowRun.nodeStates(session.id).get(summarise.id)).toMatchObject({ status: 'done', visits: 3 })
   })
 
   it('works on a copy, so editing the flow mid-run changes nothing in it', async () => {

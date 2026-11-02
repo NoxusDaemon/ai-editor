@@ -16,8 +16,10 @@ import { createConversationFlow } from './flow/templates'
 import {
   CONTEXT_MODES,
   DEFAULT_KNOWLEDGE_INSTRUCTIONS,
+  JOIN_WAITS,
   LOOP_MODES,
   MEMORY_TYPES,
+  PARALLEL_MODES,
   PLACEMENTS,
   SEARCH_MODES,
   type Flow
@@ -113,6 +115,15 @@ const nodeSchema = z.discriminatedUnion('kind', [
     assignments: z.array(z.object({ id: idSchema, name: text(), expression: text() })).default([])
   }),
   z.object({ ...nodeBase, kind: z.literal('ask'), prompt: text(), saveAs: text(), addToConversation: z.boolean().default(true) }),
+  z.object({
+    ...nodeBase,
+    kind: z.literal('parallel'),
+    mode: z.enum(PARALLEL_MODES).default('branches'),
+    branches: z.array(z.object({ id: idSchema, label: text() })).default([]),
+    items: text(),
+    concurrency: count(4, 1)
+  }),
+  z.object({ ...nodeBase, kind: z.literal('join'), wait: z.enum(JOIN_WAITS).default('all'), keepConversation: z.boolean().default(false) }),
   z.object({ ...nodeBase, kind: z.literal('end'), output: text('{{last}}') }),
   z.object({
     ...nodeBase,

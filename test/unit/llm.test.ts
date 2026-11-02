@@ -107,6 +107,27 @@ describe('LM Studio provider', () => {
     url = 'ws://other:1234'
     await provider.listModels()
     expect(sdk.constructed.at(-1)).toMatchObject({ baseUrl: 'ws://other:1234' })
-    expect(sdk.dispose).toHaveBeenCalledTimes(2)
+    await vi.waitFor(() => expect(sdk.dispose).toHaveBeenCalledTimes(2))
+  })
+
+  it('connects once for requests made together, and lets them finish when one fails', async () => {
+    const provider = createLmStudioProvider()
+    let finish!: () => void
+    const slow = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    sdk.model
+      .mockImplementationOnce(async () => ({ respond: () => Object.assign(slow.then(() => ({ stats: { stopReason: 'eosFound' } })), { async* [Symbol.asyncIterator]() {} }) }))
+      .mockRejectedValueOnce(new Error('No model "nope"'))
+    const request = (model: string) => provider.generate({ model, messages: [], signal: new AbortController().signal, onText: vi.fn() })
+
+    const running = request('slow')
+    await expect(request('nope')).rejects.toThrow('No model')
+    expect(sdk.constructed).toHaveLength(1)
+    expect(sdk.dispose).not.toHaveBeenCalled()
+
+    finish()
+    await expect(running).resolves.toMatchObject({ stopReason: 'eosFound' })
+    await vi.waitFor(() => expect(sdk.dispose).toHaveBeenCalledTimes(1))
   })
 })

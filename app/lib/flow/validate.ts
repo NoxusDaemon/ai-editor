@@ -3,7 +3,7 @@
  * that are probably mistakes. Shown on the canvas as the flow is edited.
  */
 import { checkExpression, referencedPaths } from './expression'
-import { findNode, hasFlowInput, isContextEdge, KEY_PATTERN } from './graph'
+import { branchLabel, branchPaths, findNode, hasFlowInput, isContextEdge, joinOf, KEY_PATTERN, nextEdge } from './graph'
 import { parseSchema } from './json-schema'
 import { checkTemplate, templateExpressions } from './template'
 import type { Flow, FlowNode } from './types'
@@ -45,6 +45,8 @@ function expressionsOf(node: FlowNode): [string, string][] {
       return []
     case 'set':
       return node.assignments.filter(a => a.name.trim()).map(a => [a.name.trim(), a.expression])
+    case 'parallel':
+      return node.mode === 'map' ? [['items', node.items]] : []
     default:
       return []
   }
@@ -170,6 +172,26 @@ export function validateFlow(flow: Flow): FlowIssue[] {
         break
       case 'ask':
         if (node.saveAs.trim() && !KEY_PATTERN.test(node.saveAs.trim())) add('error', `${name(node)}: “${node.saveAs}” is not a valid variable name.`, node)
+        break
+      case 'parallel': {
+        if (node.mode === 'branches') {
+          if (!node.branches.length) add('warning', `${name(node)} has no branches.`, node)
+          node.branches.forEach((branch, i) => {
+            if (!nextEdge(flow, node.id, branch.id)) add('warning', `${name(node)}: branch “${branchLabel(branch, i)}” has nothing connected.`, node)
+          })
+        } else if (!nextEdge(flow, node.id, 'each')) {
+          add('warning', `${name(node)} has nothing connected to “Each item”.`, node)
+        }
+        const { joins, ends } = branchPaths(flow, node)
+        if (joins.length > 1) add('error', `${name(node)}'s branches lead to different Joins (${joins.map(name).join(', ')}). They must all meet at one.`, node)
+        else if (!joins.length) add('warning', `${name(node)}'s branches don't meet at a Join, so the run ends when they finish.`, node)
+        for (const end of ends) add('error', `A branch of ${name(node)} can reach ${name(end)}. Branches can't end the run: lead them to a Join.`, node)
+        break
+      }
+      case 'join':
+        if (!flow.nodes.some(other => other.kind === 'parallel' && joinOf(flow, other)?.id === node.id)) {
+          add('warning', `No Parallel node's branches meet at ${name(node)}, so it only passes the run on.`, node)
+        }
         break
       case 'knowledge':
         if (node.search !== 'keyword' && !node.embeddingModel.trim()) add('error', `${name(node)} uses ${node.search} search, which needs an embedding model.`, node)

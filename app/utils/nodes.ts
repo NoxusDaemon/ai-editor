@@ -42,6 +42,24 @@ export const NODE_META: Record<NodeKind, NodeMeta> = {
     description: 'Repeats a path a number of times, for each item, or while true',
     section: 'Steps'
   },
+  parallel: {
+    label: 'Parallel',
+    icon: 'i-lucide-git-fork',
+    tone: 'text-violet-500 dark:text-violet-400',
+    accent: 'border-t-violet-500',
+    swatch: 'var(--color-violet-500)',
+    description: 'Runs several paths at the same time',
+    section: 'Steps'
+  },
+  join: {
+    label: 'Join',
+    icon: 'i-lucide-git-merge',
+    tone: 'text-violet-500 dark:text-violet-400',
+    accent: 'border-t-violet-500',
+    swatch: 'var(--color-violet-500)',
+    description: 'Waits for the branches of a Parallel node and collects their outputs',
+    section: 'Steps'
+  },
   set: {
     label: 'Set variables',
     icon: 'i-lucide-variable',

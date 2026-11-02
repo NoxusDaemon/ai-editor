@@ -1,3 +1,6 @@
+/** How often streamed tokens reach the UI. */
+export const STREAM_FLUSH_MS = 50
+
 /**
  * Coalesces bursts of calls into at most one `flush` per interval.
  * Used to stream tokens into the editor without re-rendering per token.

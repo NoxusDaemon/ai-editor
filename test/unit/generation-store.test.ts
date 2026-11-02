@@ -49,6 +49,34 @@ describe('generation store', () => {
     expect(generation.runs[segment.id]).toMatchObject({ status: 'done', stats: { tokensPerSecond: 42 } })
   })
 
+  it('fills in placeholders and adds the system prompts the segment inherits', async () => {
+    const { llm, workspace, generation, session, segment, messages } = setup()
+    const start = session.flow.nodes.find(n => n.kind === 'start')!
+    workspace.updateNode(session.id, start.id, { input: 'Ada' })
+    workspace.updateFlowSettings(session.id, { system: 'Be brief.' })
+    const group = workspace.groupNodes(session.id, [segment.id])!
+    workspace.updateNode(session.id, group.id, { system: 'Talking to {{input}}.' })
+    workspace.updateMessage(session.id, segment.id, messages().find(m => m.role === 'user')!.id, { content: 'Greet {{upper(input)}}' })
+
+    await generation.send(session.id, segment.id)
+
+    expect(llm.generate).toHaveBeenCalledWith(expect.objectContaining({
+      messages: [{ role: 'system', content: 'Be brief.\n\nTalking to Ada.' }, { role: 'user', content: 'Greet ADA' }]
+    }))
+  })
+
+  it('refuses to send a placeholder it cannot fill in', async () => {
+    const { llm, dialogs, workspace, generation, session, segment, messages } = setup()
+    workspace.updateMessage(session.id, segment.id, messages().find(m => m.role === 'user')!.id, { content: 'Hi {{input +}}' })
+    const before = messages().length
+
+    await generation.send(session.id, segment.id)
+
+    expect(llm.generate).not.toHaveBeenCalled()
+    expect(dialogs.notify).toHaveBeenCalledWith(expect.objectContaining({ title: 'Could not fill in the placeholders' }))
+    expect(messages()).toHaveLength(before)
+  })
+
   it('appends a new assistant block when the conversation ends with a user message', async () => {
     const { llm, workspace, generation, session, segment, messages } = setup()
     const assistant = messages().at(-1)!
