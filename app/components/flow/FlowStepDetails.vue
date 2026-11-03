@@ -46,6 +46,36 @@
       <pre class="max-h-80 overflow-auto rounded bg-elevated p-2 whitespace-pre-wrap text-default">{{ outputText }}</pre>
     </section>
 
+    <section v-if="step.recalled?.length">
+      <p class="mb-1 font-medium text-dimmed uppercase">
+        Memory and knowledge
+      </p>
+      <ul class="space-y-1">
+        <li
+          v-for="item in step.recalled"
+          :key="item.nodeId"
+          class="rounded border border-default"
+        >
+          <details class="group/recall">
+            <summary class="flex cursor-pointer list-none items-center gap-1.5 px-2 py-1">
+              <UIcon
+                :name="NODE_META[item.kind].icon"
+                class="size-3.5 shrink-0"
+                :class="NODE_META[item.kind].tone"
+              />
+              <span class="min-w-0 flex-1 truncate font-medium text-default">{{ item.title }}</span>
+              <span class="shrink-0 text-dimmed">{{ item.text ? (item.placement === 'system' ? 'in the system prompt' : 'as a message') : 'nothing to recall' }}</span>
+              <UIcon
+                name="i-lucide-chevron-down"
+                class="size-3.5 shrink-0 text-dimmed transition-transform group-open/recall:rotate-180"
+              />
+            </summary>
+            <pre class="max-h-64 overflow-auto border-t border-default bg-elevated p-2 whitespace-pre-wrap text-default">{{ item.text || 'Empty: nothing was added to the prompt.' }}</pre>
+          </details>
+        </li>
+      </ul>
+    </section>
+
     <section v-if="step.hits?.length">
       <p class="mb-1 font-medium text-dimmed uppercase">
         Retrieved passages
@@ -95,7 +125,11 @@
               />
               {{ BLOCK_META[message.role].label }}
             </p>
-            <pre class="max-h-64 overflow-auto rounded bg-elevated p-2 whitespace-pre-wrap text-default">{{ message.content }}</pre>
+            <FlowMarkedText
+              :text="message.content"
+              :marks="step.recalled"
+              class="max-h-64 overflow-auto rounded bg-elevated p-2 text-default"
+            />
           </div>
         </div>
       </template>
@@ -107,6 +141,7 @@
 import type { RunStep } from '~/lib/flow/engine'
 import { formatValue } from '~/lib/flow/expression'
 import { BLOCK_META } from '~/utils/blocks'
+import { NODE_META } from '~/utils/nodes'
 
 const props = defineProps<{ step: RunStep }>()
 

@@ -25,6 +25,8 @@ export interface GenerateRequest {
   maxTokens?: number
   /** Constrains the reply to JSON matching this schema, where the model supports it. */
   jsonSchema?: object
+  /** The reply so far: the model carries on from it instead of starting a new message. Only new text is streamed. */
+  prefill?: string
 }
 
 export type ModelKind = 'llm' | 'embedding'
@@ -78,6 +80,26 @@ interface Connection {
   retired: boolean
 }
 
+type LoadedModel = Awaited<ReturnType<LMStudioClient['llm']['model']>>
+
+/** Stands in for the reply so far while the chat is formatted. */
+const CONTINUE_MARKER = 'AIEDITORCONTINUEHERE'
+
+/**
+ * The chat formatted with the model's own prompt template, ending part-way
+ * through the assistant's reply. A raw completion from there carries the reply
+ * on, where a chat request would start a new message.
+ */
+async function continuationPrompt(llm: LoadedModel, messages: ChatMessage[], prefill: string): Promise<string> {
+  const chat = [...messages, { role: 'assistant' as const, content: CONTINUE_MARKER }]
+  // The completion adds its own start-of-text token. Some engines (llama-server) can't leave it out, and don't add it here anyway.
+  const formatted = await llm.applyPromptTemplate(chat, { omitBosToken: true }).catch(() => llm.applyPromptTemplate(chat))
+  // The template may close the assistant's message or add more after it: everything from the marker on goes.
+  const at = formatted.lastIndexOf(CONTINUE_MARKER)
+  if (at === -1) throw new Error('This model’s prompt template can’t carry on a reply. Use Regenerate instead.')
+  return formatted.slice(0, at) + prefill
+}
+
 export function createLmStudioProvider(getServerUrl: () => string = () => ''): LlmProvider {
   let connection: Connection | undefined
 
@@ -127,16 +149,19 @@ export function createLmStudioProvider(getServerUrl: () => string = () => ''): L
         .sort((a, b) => a.label.localeCompare(b.label))
     }),
 
-    generate: ({ model, messages, signal, onText, onReasoning, temperature, maxTokens, jsonSchema }) => withClient(async (c) => {
+    generate: ({ model, messages, signal, onText, onReasoning, temperature, maxTokens, jsonSchema, prefill }) => withClient(async (c) => {
       const llm = model ? await c.llm.model(model, { signal }) : await c.llm.model()
       signal.throwIfAborted()
 
-      const prediction = llm.respond(messages, {
+      const options = {
         signal,
         ...(temperature !== undefined && { temperature }),
         ...(maxTokens !== undefined && { maxTokens }),
         ...(jsonSchema && { structured: { type: 'json' as const, jsonSchema } })
-      })
+      }
+      const prediction = prefill
+        ? llm.complete(await continuationPrompt(llm, messages, prefill), options)
+        : llm.respond(messages, options)
       for await (const fragment of prediction) {
         if (fragment.reasoningType === 'none') onText(fragment.content)
         else if (fragment.reasoningType === 'reasoning') onReasoning?.(fragment.content)

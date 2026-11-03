@@ -257,6 +257,10 @@ describe('runFlow', () => {
 
     expect(model.calls[1]!.messages[0]!.content).toBe('## Facts\n- Likes tea\n- Lives in Leeds')
     expect(result.memory).toEqual({ [facts.id]: ['Likes tea', 'Lives in Leeds'] })
+    // The step records exactly what was recalled, and where it went.
+    expect(result.steps.find(step => step.nodeId === use.id)!.recalled).toEqual([
+      { nodeId: facts.id, kind: 'memory', title: 'Facts', placement: 'system', text: '## Facts\n- Likes tea\n- Lives in Leeds' }
+    ])
   })
 
   it('asks the user, and stops when they decline', async () => {

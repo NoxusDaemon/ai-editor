@@ -29,7 +29,7 @@
         >{{ statusText }}</span>
 
         <UTooltip
-          :text="running ? 'Stop generating' : 'Try this segment on its own: streams a reply into its last empty assistant block'"
+          :text="running ? 'Stop generating' : continuing ? 'Carry on the last reply from where it ends. Add an assistant block for a new reply.' : 'Try this segment on its own: streams a reply into its last assistant block, or a new one'"
           :kbds="['meta', 'enter']"
         >
           <UButton
@@ -43,8 +43,8 @@
           />
           <UButton
             v-else
-            label="Send"
-            icon="i-lucide-send-horizontal"
+            :label="continuing ? 'Continue' : 'Send'"
+            :icon="continuing ? 'i-lucide-text-cursor-input' : 'i-lucide-send-horizontal'"
             variant="soft"
             data-testid="send"
             @click="generation.send(sessionId, segment.id)"
@@ -57,6 +57,7 @@
 
 <script setup lang="ts">
 import type { SegmentNode } from '~/lib/flow/types'
+import { planGeneration } from '~/lib/workspace'
 import { BLOCK_META, BLOCK_TYPES } from '~/utils/blocks'
 
 const props = defineProps<{
@@ -69,6 +70,8 @@ const generation = useGenerationStore()
 
 const run = computed(() => generation.runs[props.segment.id])
 const running = computed(() => run.value?.status === 'running')
+/** Send carries on the reply in the last assistant block. */
+const continuing = computed(() => planGeneration(props.segment.blocks).prefill.trim() !== '')
 
 const statusText = computed(() => {
   const current = run.value

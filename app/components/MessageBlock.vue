@@ -39,6 +39,35 @@
         <span class="ms-auto px-1 text-xs text-dimmed tabular-nums">≈ {{ tokens }} tokens</span>
       </UTooltip>
       <div class="flex items-center opacity-0 transition-opacity group-hover/block:opacity-100 group-focus-within/block:opacity-100">
+        <template v-if="block.role === 'assistant'">
+          <UTooltip
+            text="Continue from the caret: keeps the text before it and writes the rest again"
+            :kbds="['meta', 'shift', 'enter']"
+          >
+            <UButton
+              icon="i-lucide-text-cursor-input"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              aria-label="Continue from the caret"
+              :disabled="busy || !editor?.hasCaret"
+              data-testid="continue-from-caret"
+              @click="continueFromCaret"
+            />
+          </UTooltip>
+          <UTooltip text="Regenerate: write this reply again from scratch">
+            <UButton
+              icon="i-lucide-refresh-cw"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              aria-label="Regenerate"
+              :disabled="busy"
+              data-testid="regenerate"
+              @click="generation.send(sessionId, segmentId, { blockId: block.id, prefix: '' })"
+            />
+          </UTooltip>
+        </template>
         <UTooltip :text="copied ? 'Copied' : 'Copy'">
           <UButton
             :icon="copied ? 'i-lucide-check' : 'i-lucide-copy'"
@@ -75,10 +104,13 @@
     </div>
 
     <PromptEditor
+      ref="editor"
       :model-value="block.content"
       :placeholder="meta.placeholder"
       :readonly="streaming"
+      :continuable="block.role === 'assistant' && !busy"
       @update:model-value="content => workspace.updateMessage(sessionId, segmentId, block.id, { content })"
+      @continue="prefix => generation.send(sessionId, segmentId, { blockId: block.id, prefix })"
     />
   </section>
 </template>
@@ -98,7 +130,16 @@ const props = defineProps<{
 const emit = defineEmits<{ remove: [] }>()
 
 const workspace = useWorkspaceStore()
+const generation = useGenerationStore()
 const { copy, copied } = useCopyButton()
+
+const editor = useTemplateRef('editor')
+const busy = computed(() => generation.isRunning(props.segmentId))
+
+function continueFromCaret() {
+  const prefix = editor.value?.textBeforeCaret()
+  if (prefix != null) void generation.send(props.sessionId, props.segmentId, { blockId: props.block.id, prefix })
+}
 
 const meta = computed(() => BLOCK_META[props.block.role])
 const roleItems = MESSAGE_ROLES.map(role => ({ label: BLOCK_META[role].label, value: role, icon: BLOCK_META[role].icon }))

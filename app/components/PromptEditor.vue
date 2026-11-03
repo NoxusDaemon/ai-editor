@@ -6,14 +6,15 @@
     :placeholder="placeholder"
     :image="false"
     :mention="false"
-    :extensions="[ReserveAppShortcuts, SnippetDrop]"
+    :extensions="[ReserveAppShortcuts, SnippetDrop, ContinueShortcut]"
     class="w-full"
     :ui="{ base: 'min-h-12 px-4 py-3 text-sm/6' }"
+    @focusin="hasCaret = true"
   />
 </template>
 
 <script lang="ts">
-import { Extension } from '@tiptap/core'
+import { Extension, type Editor } from '@tiptap/core'
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import { padSnippet, SNIPPET_MIME } from '~/utils/snippets'
 
@@ -26,6 +27,12 @@ export const ReserveAppShortcuts = Extension.create({
   name: 'reserveAppShortcuts',
   addKeyboardShortcuts: () => ({ 'Mod-Enter': () => true, 'Mod-Shift-s': () => true })
 })
+
+/** The text before the caret, as Markdown: what a reply carries on from. */
+export function markdownBeforeCaret(editor: Editor): string {
+  const before = editor.state.doc.cut(0, editor.state.selection.from)
+  return editor.markdown?.serialize(before.toJSON()) ?? before.textContent
+}
 
 /** Drops a snippet as a word: spaced from the text around it, with the caret after it. */
 const SnippetDrop = Extension.create({
@@ -62,9 +69,33 @@ const props = defineProps<{
   placeholder?: string
   /** Locks the editor, e.g. while a reply is streamed into it. */
   readonly?: boolean
+  /** Mod-Shift-Enter asks to carry the text on from the caret (a model's reply). */
+  continuable?: boolean
 }>()
+const emit = defineEmits<{ continue: [prefix: string] }>()
 
 const editor = useTemplateRef('editor')
+/** Whether the caret has been placed in this editor, so "from the caret" means something. */
+const hasCaret = ref(false)
+
+function textBeforeCaret(): string | null {
+  const instance = editor.value?.editor
+  return instance ? markdownBeforeCaret(instance) : null
+}
+
+const ContinueShortcut = Extension.create({
+  name: 'continueFromCaret',
+  addKeyboardShortcuts: () => ({
+    'Mod-Shift-Enter': () => {
+      if (!props.continuable || props.readonly) return false
+      const prefix = textBeforeCaret()
+      if (prefix !== null) emit('continue', prefix)
+      return true
+    }
+  })
+})
+
+defineExpose({ textBeforeCaret, hasCaret })
 
 watch(
   () => [editor.value?.editor, props.readonly] as const,

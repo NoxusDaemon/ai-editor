@@ -125,8 +125,31 @@ const nodes = computed<Node[]>(() => ordered.value.map(node => ({
 
 const runStates = computed(() => flowRun.nodeStates(sessionId))
 
-/** Edges the latest run went along. */
-const taken = computed(() => new Set((flowRun.runs[sessionId]?.steps ?? []).flatMap(step => step.via ?? [])))
+const steps = computed(() => flowRun.runs[sessionId]?.steps ?? [])
+
+/** How many times the latest run recalled each memory and knowledge node. */
+const recalls = computed(() => {
+  const counts = new Map<string, number>()
+  for (const step of steps.value) {
+    for (const item of step.recalled ?? []) if (item.text) counts.set(item.nodeId, (counts.get(item.nodeId) ?? 0) + 1)
+  }
+  return counts
+})
+
+/** Edges the latest run went along, and the context edges memory and knowledge were recalled through. */
+const taken = computed(() => {
+  const used = new Set(steps.value.flatMap(step => step.via ?? []))
+  for (const step of steps.value) {
+    const recalled = new Set((step.recalled ?? []).filter(item => item.text).map(item => item.nodeId))
+    const segment = recalled.size ? workspace.findNode(sessionId, step.nodeId) : undefined
+    if (!segment) continue
+    const targets = new Set([segment.id, ...ancestors(flow.value, segment).map(group => group.id)])
+    for (const edge of flow.value.edges) {
+      if (isContextEdge(edge) && recalled.has(edge.source) && targets.has(edge.target)) used.add(edge.id)
+    }
+  }
+  return used
+})
 
 const removeEdge = (id: string) => workspace.removeEdges(sessionId, [id])
 
@@ -162,7 +185,7 @@ function zoomToGroup(groupId: string) {
   void vueFlow.fitView({ nodes: [groupId], padding: 0.15, duration: prefersReducedMotion() ? 0 : 400 })
 }
 
-provide(FLOW_CONTEXT, { sessionId, detail, runStates, issues, open, zoomToGroup })
+provide(FLOW_CONTEXT, { sessionId, detail, runStates, recalls, issues, open, zoomToGroup })
 
 function isValidConnection(connection: Connection) {
   return canConnect(flow.value, { ...connection, sourceHandle: connection.sourceHandle ?? 'out' })

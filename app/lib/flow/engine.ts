@@ -42,6 +42,7 @@ import type {
   MemoryNode,
   NodeKind,
   ParallelNode,
+  Placement,
   SegmentNode,
   SetNode
 } from './types'
@@ -98,6 +99,16 @@ export interface NodeResult {
 
 export type StepStatus = 'running' | 'done' | 'error' | 'stopped'
 
+/** Memory or knowledge put into a segment's prompt. */
+export interface RecalledContext {
+  nodeId: string
+  kind: 'memory' | 'knowledge'
+  title: string
+  placement: Placement
+  /** Exactly what went into the prompt; empty when there was nothing to recall. */
+  text: string
+}
+
 /** One node run: what went in, what came out. Shown in the run panel. */
 export interface RunStep {
   id: string
@@ -124,6 +135,8 @@ export interface RunStep {
   reasoning?: string
   output?: unknown
   attempts?: number
+  /** Memory and knowledge recalled into the prompt, in order. */
+  recalled?: RecalledContext[]
   hits?: RetrievalHit[]
   stats?: GenerateStats
   error?: string
@@ -404,9 +417,11 @@ export async function runFlow({ flow, model, input, signal }: RunInput, deps: Ru
     const system = settings.system.map(text => renderTemplate(text, s))
     const injected: ChatMessage[] = []
     const hits: RetrievalHit[] = []
+    const recalled: RecalledContext[] = []
     for (const source of contextSources(flow, node)) {
       const text = source.kind === 'memory' ? recall(f, source, s) : await retrieve(f, source, s, hits)
       throwIfStopped(f)
+      recalled.push({ nodeId: source.id, kind: source.kind, title: label(source), placement: source.placement, text })
       if (!text) continue
       if (source.placement === 'system') system.push(text)
       else injected.push({ role: 'user', content: text })
@@ -430,7 +445,7 @@ export async function runFlow({ flow, model, input, signal }: RunInput, deps: Ru
       ...injected,
       ...turns
     ])
-    emit({ type: 'update', stepId: step.id, patch: { model: settings.model || 'Loaded model', messages, hits } })
+    emit({ type: 'update', stepId: step.id, patch: { model: settings.model || 'Loaded model', messages, hits, recalled } })
 
     let output: unknown
     let text: string

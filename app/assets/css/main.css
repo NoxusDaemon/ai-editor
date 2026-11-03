@@ -146,3 +146,10 @@
 .flow-canvas .vue-flow__edge-textbg {
   fill: var(--ui-bg);
 }
+
+/* Memory and knowledge the latest run recalled through this connection. */
+.flow-canvas .flow-edge--context.flow-edge--taken {
+  stroke: var(--ui-secondary);
+  stroke-width: 2.5;
+  opacity: 1;
+}

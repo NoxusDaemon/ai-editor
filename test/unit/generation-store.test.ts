@@ -147,6 +147,61 @@ describe('generation store', () => {
     expect(messages().at(-1)!.content).toBe('Once upon a time')
   })
 
+  it('carries a stopped reply on in the same block when sent again', async () => {
+    const { llm, generation, session, segment, messages } = setup()
+    llm.generate.mockImplementationOnce(streamUntilAborted(['Once upon', ' a time ']))
+    const sending = generation.send(session.id, segment.id)
+    generation.stop(segment.id)
+    await sending
+    const count = messages().length
+    llm.generate.mockImplementationOnce(async ({ onText }) => {
+      onText(' there was a fox.')
+      return { stopReason: 'eosFound' }
+    })
+
+    await generation.send(session.id, segment.id)
+
+    expect(llm.generate).toHaveBeenLastCalledWith(expect.objectContaining({
+      prefill: 'Once upon a time',
+      messages: [{ role: 'user', content: 'Who are you, and what can you do?' }]
+    }))
+    expect(messages()).toHaveLength(count)
+    expect(messages().at(-1)!.content).toBe('Once upon a time there was a fox.')
+  })
+
+  it('continues a reply from the caret, replacing what came after it as an edit that can be undone', async () => {
+    const { llm, workspace, generation, session, segment, messages } = setup()
+    const reply = messages().at(-1)!
+    workspace.updateMessage(session.id, segment.id, reply.id, { content: 'Paris is the capital. It is small.' })
+    workspace.checkpoint(session.id)
+    llm.generate.mockImplementation(async ({ onText }) => {
+      onText(' It is large.')
+      return { stopReason: 'eosFound' }
+    })
+
+    await generation.send(session.id, segment.id, { blockId: reply.id, prefix: 'Paris is the capital.' })
+
+    expect(llm.generate).toHaveBeenCalledWith(expect.objectContaining({ prefill: 'Paris is the capital.' }))
+    expect(messages().at(-1)!.content).toBe('Paris is the capital. It is large.')
+    workspace.undo(session.id)
+    expect(messages().at(-1)!.content).toBe('Paris is the capital. It is small.')
+  })
+
+  it('regenerates a reply from scratch', async () => {
+    const { llm, workspace, generation, session, segment, messages } = setup()
+    const reply = messages().at(-1)!
+    workspace.updateMessage(session.id, segment.id, reply.id, { content: 'Old answer' })
+    llm.generate.mockImplementation(async ({ onText }) => {
+      onText('New answer')
+      return { stopReason: 'eosFound' }
+    })
+
+    await generation.send(session.id, segment.id, { blockId: reply.id, prefix: '' })
+
+    expect(llm.generate).toHaveBeenCalledWith(expect.not.objectContaining({ prefill: expect.anything() }))
+    expect(messages().at(-1)!.content).toBe('New answer')
+  })
+
   it('cancels the run when its session is closed', async () => {
     const { llm, workspace, generation, session, segment } = setup()
     let signal: AbortSignal | undefined

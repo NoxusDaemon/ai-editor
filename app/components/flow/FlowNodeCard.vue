@@ -266,6 +266,8 @@ const badges = computed<Badge[]>(() => {
     list.push({ label: 'As a message', icon: 'i-lucide-message-square' })
   }
   if (current.kind === 'knowledge' && current.embeddingModel) list.push({ label: current.embeddingModel.split('/').pop()!, icon: 'i-lucide-cpu' })
+  const recalled = flowContext.recalls.value.get(props.id)
+  if (recalled) list.push({ label: `Recalled ×${recalled}`, icon: 'i-lucide-text-cursor', color: 'secondary' })
   if (state.value && state.value.visits > 1) list.push({ label: `Ran ×${state.value.visits}`, icon: 'i-lucide-repeat', color: 'info' })
   return list
 })

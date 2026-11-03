@@ -10,6 +10,8 @@ export interface FlowContext {
   sessionId: string
   detail: ComputedRef<DetailLevel>
   runStates: ComputedRef<Map<string, NodeRunState>>
+  /** Times the latest run recalled each memory and knowledge node. */
+  recalls: ComputedRef<Map<string, number>>
   issues: ComputedRef<Map<string, FlowIssue[]>>
   /** Opens a node's zoomed-in editor. */
   open: (nodeId: string) => void

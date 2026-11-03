@@ -52,9 +52,18 @@ export interface GenerateStats {
 }
 
 export interface GenerationPlan {
+  /** What comes before the reply. */
   messages: ChatMessage[]
-  /** Existing empty assistant block to stream into, or `null` to append a new one. */
+  /** Existing assistant block the reply goes into, or `null` to append a new one. */
   targetBlockId: string | null
+  /** The reply so far: the model carries on from it. Empty for a fresh reply. */
+  prefill: string
+}
+
+/** Continue a reply from a point in its text: `prefix` is the text kept before that point. */
+export interface ContinueFrom {
+  blockId: string
+  prefix: string
 }
 
 export const DEFAULT_USER_PROMPT = 'Who are you, and what can you do?'
@@ -90,20 +99,26 @@ export const isMessage = (block: Block): block is MessageBlock => block.kind ===
 
 /**
  * Decides what to send and where the reply goes (playground semantics):
- * an empty trailing assistant block is filled in; otherwise a new assistant
- * block is appended. Snippets and empty messages are not sent.
+ * - A trailing assistant block gets the reply: filled in if empty, carried on
+ *   from its end otherwise, so stopping and sending again keeps one reply.
+ * - Otherwise a new assistant block is appended.
+ * - `from` carries on a given assistant block from a point in its text instead;
+ *   only the messages before it are sent, and the text after that point is replaced.
+ * Snippets and empty messages are not sent.
  */
-export function planGeneration(blocks: readonly Block[]): GenerationPlan {
+export function planGeneration(blocks: readonly Block[], from?: ContinueFrom): GenerationPlan {
   const messageBlocks = blocks.filter(isMessage)
-  const last = messageBlocks.at(-1)
-  const fillLast = last?.role === 'assistant' && last.content.trim() === ''
-  const context = fillLast ? messageBlocks.slice(0, -1) : messageBlocks
+  const index = from ? messageBlocks.findIndex(b => b.id === from.blockId) : messageBlocks.length - 1
+  const target = messageBlocks[index]?.role === 'assistant' ? messageBlocks[index] : undefined
+  const context = target ? messageBlocks.slice(0, index) : messageBlocks
 
   return {
     messages: context
       .filter(b => b.content.trim() !== '')
       .map(b => ({ role: b.role, content: b.content })),
-    targetBlockId: fillLast ? last.id : null
+    targetBlockId: target?.id ?? null,
+    // A trailing space would split the next word's token; line breaks are kept.
+    prefill: target ? (from?.prefix ?? target.content).replace(/[ \t]+$/, '') : ''
   }
 }
 

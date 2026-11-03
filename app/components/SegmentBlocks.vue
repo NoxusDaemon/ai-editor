@@ -5,15 +5,30 @@
       class="min-h-0 flex-1 overflow-y-auto"
     >
       <div class="mx-auto w-full max-w-4xl px-4 py-5">
+        <!-- Where memory and knowledge go into this segment's prompt. -->
+        <FlowContextMarker
+          :session-id="sessionId"
+          :segment="segment"
+          placement="system"
+          class="mb-3"
+        />
         <div
           ref="list"
           class="flex flex-col gap-3"
           data-testid="block-list"
         >
-          <template
+          <!-- One wrapper per block, so the sortable list's indices are the blocks'. -->
+          <div
             v-for="block in segment.blocks"
             :key="block.id"
+            class="flex flex-col gap-3"
           >
+            <FlowContextMarker
+              v-if="block.id === firstTurnId"
+              :session-id="sessionId"
+              :segment="segment"
+              placement="message"
+            />
             <MessageBlock
               v-if="block.kind === 'message'"
               :session-id="sessionId"
@@ -30,8 +45,15 @@
               :block="block"
               @remove="workspace.removeBlock(sessionId, segment.id, block.id)"
             />
-          </template>
+          </div>
         </div>
+        <FlowContextMarker
+          v-if="!firstTurnId"
+          :session-id="sessionId"
+          :segment="segment"
+          placement="message"
+          class="mt-3"
+        />
 
         <UEmpty
           v-if="!segment.blocks.length"
@@ -69,6 +91,8 @@ const list = useTemplateRef('list')
 const scroller = useTemplateRef('scroller')
 
 const run = computed(() => generation.runs[props.segment.id])
+/** Memory and knowledge placed as a message go just before the segment's first user or assistant message. */
+const firstTurnId = computed(() => props.segment.blocks.find(block => block.kind === 'message' && block.role !== 'system')?.id)
 const streamingBlockId = computed(() => run.value?.status === 'running' ? run.value.blockId : null)
 
 useSortable(list, toRef(() => props.segment.blocks), {

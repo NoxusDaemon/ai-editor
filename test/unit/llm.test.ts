@@ -84,6 +84,37 @@ describe('LM Studio provider', () => {
     expect(stats).toEqual({ stopReason: 'eosFound', tokensPerSecond: 10, predictedTokens: 4, timeToFirstTokenSec: undefined })
   })
 
+  it('carries a reply on by completing the chat formatted with the model’s template', async () => {
+    const respond = vi.fn()
+    const complete = vi.fn(() => prediction([{ content: ' fox.', reasoningType: 'none' }], { stopReason: 'eosFound' }))
+    // A ChatML-like template that closes the assistant's message and adds nothing after it.
+    const applyPromptTemplate = vi.fn(async (messages: Array<{ role: string, content: string }>) =>
+      messages.map(m => `<|im_start|>${m.role}\n${m.content}<|im_end|>\n`).join(''))
+    sdk.model.mockResolvedValue({ respond, complete, applyPromptTemplate })
+    const onText = vi.fn()
+    const messages = [{ role: 'user' as const, content: 'Tell a story' }]
+
+    await createLmStudioProvider().generate({ model: 'qwen', messages, prefill: 'Once there was a', signal: new AbortController().signal, onText })
+
+    expect(applyPromptTemplate).toHaveBeenCalledWith([...messages, { role: 'assistant', content: expect.any(String) }], { omitBosToken: true })
+    expect(complete).toHaveBeenCalledWith('<|im_start|>user\nTell a story<|im_end|>\n<|im_start|>assistant\nOnce there was a', expect.anything())
+    expect(respond).not.toHaveBeenCalled()
+    expect(onText.mock.calls).toEqual([[' fox.']])
+  })
+
+  it('formats the chat without leaving out the start token on engines that can’t', async () => {
+    const complete = vi.fn(() => prediction([], { stopReason: 'eosFound' }))
+    const applyPromptTemplate = vi.fn(async (messages: Array<{ content: string }>, opts?: { omitBosToken?: boolean }) => {
+      if (opts?.omitBosToken) throw new Error('llama-server /apply-template does not support omitBosToken.')
+      return `[INST]${messages[0]!.content}[/INST]${messages[1]!.content}`
+    })
+    sdk.model.mockResolvedValue({ complete, applyPromptTemplate })
+
+    await createLmStudioProvider().generate({ model: 'm', messages: [{ role: 'user', content: 'Hi' }], prefill: 'Hello', signal: new AbortController().signal, onText: vi.fn() })
+
+    expect(complete).toHaveBeenCalledWith('[INST]Hi[/INST]Hello', expect.anything())
+  })
+
   it('uses any loaded model when none is chosen', async () => {
     sdk.model.mockResolvedValue({ respond: () => prediction([], { stopReason: 'eosFound' }) })
     await createLmStudioProvider().generate({ model: '', messages: [], signal: new AbortController().signal, onText: vi.fn() })

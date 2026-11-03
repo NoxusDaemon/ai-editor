@@ -75,6 +75,8 @@ Drag a node onto a group to put it inside, and drag it out to take it out. Selec
 
 Memory goes into the system prompt under a `## <title>` heading, or as a message just before the segment's own.
 
+To see where memory and knowledge go, zoom into a segment: a marker sits at the top of its messages for what is added to the system prompt, and another just before its first user or assistant message for what is added as a message. Click a name in a marker to see what it holds, or, after a run, exactly what it recalled. In the run panel, recalled memory and knowledge are listed under each step and highlighted where they appear in what was sent. On the canvas, a memory or knowledge node shows how often the last run recalled it, and the connections it was recalled through are highlighted.
+
 ### Knowledge (RAG)
 
 - **Documents**: paste text, or import text, Markdown, CSV, JSON or HTML files. Documents are stored in the workspace file.
@@ -133,6 +135,8 @@ The **Variables** button in a node's editor lists what's available. Drag an item
 ## Running
 
 - **Run** (Ctrl/⌘ + Enter on the canvas) runs from Start with the input in the toolbar. Inside a zoomed-in segment, Ctrl/⌘ + Enter is that segment's Send, which tries it on its own like the classic editor: with the system prompts it inherits, and its placeholders filled in from the Start node's input and the variables and outputs of the last run.
+  - Send fills in an empty last assistant block, and carries on one that already has text, using the model's own prompt template so it continues the same message instead of starting a new one. Stopping and sending again continues the same reply; add an assistant block for a fresh one.
+  - Each assistant block has **Regenerate** and **Continue from the caret** (Ctrl/⌘ + Shift + Enter). Continuing from the caret keeps the text before it, replaces the rest, and sends only the messages above that block. Models only see what comes before the caret, so they can't fill in a gap in the middle. Cutting the text is an undo step.
 - The flow is checked first. Errors (such as an invalid expression, a broken schema, no Start, or duplicate keys) stop the run. Warnings (such as an unreachable node, or a cycle with no condition, loop or question) don't. Problems show on the cards and in the toolbar.
 - A run works on a copy of the flow, so editing during a run doesn't change it halfway.
 - **Step limit** (flow settings, default 200): a run stops after this many steps, counted across all branches, so a loop that never ends can't run forever.

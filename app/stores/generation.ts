@@ -5,7 +5,7 @@ import { normalizeMessages } from '~/lib/flow/engine'
 import { resolveSettings } from '~/lib/flow/graph'
 import { renderTemplate } from '~/lib/flow/template'
 import type { StartNode } from '~/lib/flow/types'
-import { hasPrompt, planGeneration, type ChatMessage } from '~/lib/workspace'
+import { hasPrompt, planGeneration, type ChatMessage, type ContinueFrom } from '~/lib/workspace'
 import { errorMessage, useServices } from '~/services/container'
 import type { GenerateStats, ModelOption } from '~/services/llm'
 import { useFlowRunStore } from './flowRun'
@@ -65,13 +65,18 @@ export const useGenerationStore = defineStore('generation', () => {
     }
   }
 
-  async function send(sessionId: string, segmentId: string) {
+  /**
+   * Streams a reply into the segment: into its trailing assistant block (carrying
+   * on any text already there), or a new one. `from` carries on an assistant
+   * block from a point in its text instead, replacing what came after it.
+   */
+  async function send(sessionId: string, segmentId: string, from?: ContinueFrom) {
     const session = workspace.findSession(sessionId)
     const segment = workspace.findSegment(sessionId, segmentId)
     if (!session || !segment || isRunning(segmentId)) return
     const { llm, dialogs } = useServices()
 
-    const plan = planGeneration(segment.blocks)
+    const plan = planGeneration(segment.blocks, from)
     if (!hasPrompt(plan)) {
       dialogs.notify({ title: 'Nothing to send', description: 'Write a system or user message first.', color: 'warning' })
       return
@@ -105,7 +110,9 @@ export const useGenerationStore = defineStore('generation', () => {
     const target = created
       ? workspace.addBlock(sessionId, segmentId, 'assistant')
       : workspace.findBlock(sessionId, segmentId, plan.targetBlockId!, 'message')
-    if (!target) return
+    if (target?.kind !== 'message') return
+    // Cutting the reply at the caret (or clearing it to regenerate) is an edit of its own, so it can be undone.
+    if (target.content !== plan.prefill) workspace.updateMessage(sessionId, segmentId, target.id, { content: plan.prefill })
 
     const controller = new AbortController()
     controllers.set(segmentId, controller)
@@ -117,7 +124,7 @@ export const useGenerationStore = defineStore('generation', () => {
     const batcher = createBatcher(() => {
       // Deleting the block mid-stream cancels the run.
       if (!workspace.findBlock(sessionId, segmentId, target.id, 'message')) return controller.abort()
-      workspace.streamMessage(sessionId, segmentId, target.id, text)
+      workspace.streamMessage(sessionId, segmentId, target.id, plan.prefill + text)
       run.reasoning = reasoning
     }, STREAM_FLUSH_MS)
 
@@ -127,6 +134,7 @@ export const useGenerationStore = defineStore('generation', () => {
         messages,
         ...(temperature !== null && { temperature }),
         ...(maxTokens !== null && { maxTokens }),
+        ...(plan.prefill && { prefill: plan.prefill }),
         signal: controller.signal,
         onText: (delta) => {
           text += delta

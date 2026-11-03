@@ -23,19 +23,19 @@ Built with Nuxt 4, Nuxt UI 4, Pinia, Vue Flow and Tauri 2. See [docs/FLOWS.md](d
   - Cycles are allowed, with a step limit as a safety net.
   - A small, safe expression language (no `eval`) for conditions and placeholders.
 - **Groups** – containers whose system prompt, model, sampling, context and setup-only settings apply to every segment inside, nested groups included. Memory and knowledge placed in a group feed everything in it.
-- **Memory** – notes, the recent conversation, or a store of facts that segments write. A store can keep its entries between runs, saved (and encrypted) with the workspace.
+- **Memory** – notes, the recent conversation, or a store of facts that segments write. A store can keep its entries between runs, saved (and encrypted) with the workspace. Markers in a zoomed-in segment show where memory and knowledge go into its prompt and what they hold, or what they recalled in the last run.
 - **Knowledge (RAG)**
   - Import or paste documents.
   - Chunking with overlap.
   - Keyword (BM25), semantic (LM Studio embeddings, cached) or hybrid (reciprocal rank fusion) search, optionally preferring varied passages (MMR).
   - Numbered passages for citations, and a test search box.
-- **Run panel** – every step with exactly what was sent to the model, the streamed reply and reasoning, retrieved passages and scores, attempts and timing. Also the conversation as it built up, the variables, and the output. The canvas highlights the running node and the path taken.
+- **Run panel** – every step with exactly what was sent to the model, with recalled memory and knowledge highlighted where they went, the streamed reply and reasoning, retrieved passages and scores, attempts and timing. Also the conversation as it built up, the variables, and the output. The canvas highlights the running node, the path taken and the memory connections that were used.
 - **Templates** – conversation, chatbot with memory, knowledge Q&A, router, draft–critique–revise loop, several perspectives (parallel), summarise in parts (map-reduce), and structured extraction.
 - **Prompt blocks** – inside a segment, system, user and assistant messages in a rich Markdown editor. Drag to reorder, change a block's role, copy or remove it.
 - **Snippets** – trays of reusable text. Drag a snippet into any prompt and it lands as a word of its own, with a space after it so the next one can follow. Group snippets under named section headings, and switch on Arrange to reorder snippets and headings. Snippets are never sent to the model.
 - **Snippet sidebars** – two more trays at the left and right window edges, shared by every session and saved with the workspace. They slide in when the pointer reaches the edge and can be pinned open.
 - **Sessions** – one tab per conversation. Double-click or press F2 to rename, right-click to duplicate, middle-click to close. Hovering over a tab while dragging text switches to it.
-- **Streaming replies** – in a segment, Send (Ctrl/⌘ + Enter) tries it on its own, with the system prompts it inherits and its placeholders filled in from the run input and the last run, streaming a reply into the trailing empty assistant block, or a new one. Stop at any time and keep the partial text. Reasoning ("thinking") output is shown separately and never saved. Tokens per second are shown when it finishes.
+- **Streaming replies** – in a segment, Send (Ctrl/⌘ + Enter) tries it on its own, with the system prompts it inherits and its placeholders filled in from the run input and the last run. The reply goes into the last assistant block: an empty one is filled in, and one with text is carried on, so Stop then Send continues the same reply. A new block is added only when the conversation ends with your message. Stop at any time and keep the partial text. Reply blocks also have Regenerate, and Continue from the caret (Ctrl/⌘ + Shift + Enter), which keeps the text before the caret and writes the rest again. Reasoning ("thinking") output is shown separately and never saved. Tokens per second are shown when it finishes.
 - **Files** – open, save, save as JSON, or save encrypted. Drop a file anywhere on the window to open it. Files from earlier versions of the app (plain or encrypted) still open.
 - **Autosave** – optional, debounced, and only for files that have a location on disk.
 - **Crash-safe saves** – saves go to a temporary file that is renamed over the original, so a crash or power cut never leaves a half-written workspace.
@@ -50,6 +50,7 @@ Built with Nuxt 4, Nuxt UI 4, Pinia, Vue Flow and Tauri 2. See [docs/FLOWS.md](d
 | --- | --- |
 | Run / stop the flow (Send / stop inside a segment) | Ctrl/⌘ + Enter |
 | Back from a zoomed-in node | Escape |
+| Continue a reply from the caret | Ctrl/⌘ + Shift + Enter |
 | Undo / redo flow edits | Ctrl/⌘ + Z / Ctrl/⌘ + Shift + Z |
 | Delete / duplicate / group selected nodes | Delete / Ctrl/⌘ + D / Ctrl/⌘ + G |
 | Save | Ctrl/⌘ + S |

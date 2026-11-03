@@ -24,14 +24,30 @@ describe('planGeneration', () => {
     const target = message('assistant', '')
     expect(planGeneration([createBlock('snippets'), message('system', 'Be brief'), message('user', 'Hi'), target])).toEqual({
       messages: [{ role: 'system', content: 'Be brief' }, { role: 'user', content: 'Hi' }],
-      targetBlockId: target.id
+      targetBlockId: target.id,
+      prefill: ''
     })
   })
 
-  it('appends a reply when the conversation does not end with an empty assistant block', () => {
+  it('carries on a trailing assistant block that already has text, such as a stopped reply', () => {
+    const target = message('assistant', 'Once upon a time ')
+    expect(planGeneration([message('user', 'Tell a story'), target])).toEqual({
+      messages: [{ role: 'user', content: 'Tell a story' }],
+      targetBlockId: target.id,
+      prefill: 'Once upon a time'
+    })
+  })
+
+  it('appends a reply when the conversation ends with a user message', () => {
     const plan = planGeneration([message('user', 'Hi'), message('assistant', 'Hello'), message('user', 'More')])
-    expect(plan.targetBlockId).toBeNull()
+    expect(plan).toMatchObject({ targetBlockId: null, prefill: '' })
     expect(plan.messages).toHaveLength(3)
+  })
+
+  it('carries on a reply from a point in its text, sending only what comes before it', () => {
+    const reply = message('assistant', 'Paris is the capital. It has a river.')
+    const plan = planGeneration([message('user', 'About France?'), reply, message('user', 'And Spain?')], { blockId: reply.id, prefix: 'Paris is the capital.\n\n' })
+    expect(plan).toEqual({ messages: [{ role: 'user', content: 'About France?' }], targetBlockId: reply.id, prefill: 'Paris is the capital.\n\n' })
   })
 
   it('skips snippets and empty messages', () => {

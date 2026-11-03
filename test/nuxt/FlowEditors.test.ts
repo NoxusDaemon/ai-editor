@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import FlowConditionEditor from '~/components/flow/FlowConditionEditor.vue'
 import FlowJoinEditor from '~/components/flow/FlowJoinEditor.vue'
+import FlowMarkedText from '~/components/flow/FlowMarkedText.vue'
 import FlowNodeFocus from '~/components/flow/FlowNodeFocus.vue'
 import FlowParallelEditor from '~/components/flow/FlowParallelEditor.vue'
 import FlowSetEditor from '~/components/flow/FlowSetEditor.vue'
@@ -75,6 +76,36 @@ describe('flow editors', () => {
 
     expect(wrapper.text()).toContain('Joins the branches of “Parallel”')
     expect(wrapper.text()).toContain('{{nodes.join.output.branch_1}}')
+  })
+
+  it('marks where memory and knowledge go into a segment, with what they hold', async () => {
+    const { workspace, session, node } = setup()
+    const segment = session.flow.nodes.find(n => n.kind === 'segment')!
+    const notes = node('memory')
+    workspace.updateNode(session.id, notes.id, { title: 'Style guide', content: 'Short sentences.' })
+    const facts = node('memory')
+    workspace.updateNode(session.id, facts.id, { title: 'Facts', memory: 'store', entries: ['Likes tea'], placement: 'message' })
+    workspace.connect(session.id, { source: notes.id, sourceHandle: 'ctx', target: segment.id })
+    workspace.connect(session.id, { source: facts.id, sourceHandle: 'ctx', target: segment.id })
+    const wrapper = await mountInApp(FlowNodeFocus, { sessionId: session.id, node: segment })
+
+    expect(wrapper.get('[data-testid=context-marker-system]').text()).toContain('Style guide')
+    const inserted = wrapper.get('[data-testid=context-marker-message]')
+    expect(inserted.text()).toContain('Facts')
+    // Just before the segment's first user message.
+    expect(inserted.element.nextElementSibling?.getAttribute('data-role')).toBe('user')
+    wrapper.unmount()
+  })
+
+  it('highlights recalled memory inside what was sent', async () => {
+    const wrapper = await mountInApp(FlowMarkedText, {
+      text: 'Be kind.\n\n## Facts\n- Likes tea\n\nAnswer briefly.',
+      marks: [{ nodeId: 'facts', kind: 'memory', title: 'Facts', placement: 'system', text: '## Facts\n- Likes tea' }]
+    })
+
+    const mark = wrapper.get('[data-testid=recalled-facts]')
+    expect(mark.text()).toBe('Facts## Facts\n- Likes tea')
+    expect(wrapper.text()).toContain('Answer briefly.')
   })
 
   it('opens a segment with its messages, settings and a schema check', async () => {
